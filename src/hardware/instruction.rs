@@ -1,9 +1,38 @@
+use num_derive::FromPrimitive;
+
 use super::word::Word;
 
+extern crate num;
 pub struct DecodedInstruction {
     pub opcode:DcpuInstruction,
     pub operand_b:Option<BOperand>,
     pub operand_a:AOperand,
+}
+
+impl TryInto<DecodedInstruction> for Word {
+    type Error = ();
+
+    fn try_into(self) -> Result<DecodedInstruction, Self::Error> {
+        let bits = *self;
+        let op_a = (bits & 0b111111).try_into().expect("Illegal a-operand!");
+        let op_b = (bits & 0b11111000000) >> 6;
+        let opcode = (bits & 0b1111100000000000) >> 11;
+        println!("raw bits: {bits:b}; operand a: {:b}; operand b: {op_b:b}; opcode: {opcode:X}",(bits & 0b111111));
+        if opcode == 0x00 {
+            let instruction:Option<DcpuInstruction> = num::FromPrimitive::from_u16(op_b | 0x20);
+            match instruction {
+                Some(instruction) => Ok(DecodedInstruction { opcode: instruction, operand_b: None, operand_a: op_a }),
+                None => Err(()),
+            }
+        } else {
+            let instruction:Option<DcpuInstruction> = num::FromPrimitive::from_u16(opcode);
+            let op_b = num::FromPrimitive::from_u16(op_b);
+            match instruction {
+                Some(instruction) => Ok(DecodedInstruction { opcode: instruction, operand_b: op_b, operand_a: op_a }),
+                None => Err(())
+            }
+        }
+    }
 }
 
 #[repr(u8)]
@@ -49,6 +78,65 @@ pub enum AOperand {
     Literal(Word) = 0x20,
 }
 
+impl TryInto<AOperand> for u16 {
+    type Error = ();
+
+    fn try_into(self) -> Result<AOperand, Self::Error> {
+        if self > 0x3f {
+            return Err(());
+        }
+        if self == 0x20 {
+            return Ok(AOperand::Literal(0xffff.into()));
+        }
+        if self > 0x20 {
+            let value = (self & 0x1f) - 1;
+            return Ok(AOperand::Literal(value.into()));
+        }
+        match self {
+            0x00 => Ok(AOperand::RegA),
+            0x01 => Ok(AOperand::RegB),
+            0x02 => Ok(AOperand::RegC),
+            0x03 => Ok(AOperand::RegX),
+            0x04 => Ok(AOperand::RegY),
+            0x05 => Ok(AOperand::RegZ),
+            0x06 => Ok(AOperand::RegI),
+            0x07 => Ok(AOperand::RegJ),
+
+            0x08 => Ok(AOperand::DerefA),
+            0x09 => Ok(AOperand::DerefB),
+            0x0a => Ok(AOperand::DerefC),
+            0x0b => Ok(AOperand::DerefX),
+            0x0c => Ok(AOperand::DerefY),
+            0x0d => Ok(AOperand::DerefZ),
+            0x0e => Ok(AOperand::DerefI),
+            0x0f => Ok(AOperand::DerefJ),
+
+            0x10 => Ok(AOperand::OffsetA),
+            0x11 => Ok(AOperand::OffsetB),
+            0x12 => Ok(AOperand::OffsetC),
+            0x13 => Ok(AOperand::OffsetX),
+            0x14 => Ok(AOperand::OffsetY),
+            0x15 => Ok(AOperand::OffsetZ),
+            0x16 => Ok(AOperand::OffsetI),
+            0x17 => Ok(AOperand::OffsetJ),
+
+            0x18 => Ok(AOperand::Pop),
+            0x19 => Ok(AOperand::Peek),
+            0x1a => Ok(AOperand::Pick),
+
+            0x1b => Ok(AOperand::StackPointer),
+            0x1c => Ok(AOperand::ProgramCounter),
+            0x1d => Ok(AOperand::Excess),
+
+            0x1e => Ok(AOperand::DerefImmediate),
+            0x1f => Ok(AOperand::ValueImmediate),
+
+            _ => panic!("Unreachable variant!")
+        }
+    }
+}
+
+#[derive(FromPrimitive)]
 pub enum BOperand {
     RegA = 0x00,
     RegB = 0x01,
@@ -89,6 +177,7 @@ pub enum BOperand {
     ValueImmediate = 0x1F,
 }
 
+#[derive(FromPrimitive)]
 pub enum DcpuInstruction {
     /// Invalid instruction. May crash the CPU if you like.
     Undefined = 0x40, //For instructions that weren't filled in, like 0x18
