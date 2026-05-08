@@ -1,7 +1,7 @@
 use std::ops::{Deref, DerefMut};
 
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq, Eq, PartialOrd, Ord)]
 pub struct Word(u16);
 
 impl Deref for Word {

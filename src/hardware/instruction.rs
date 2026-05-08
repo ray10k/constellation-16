@@ -3,6 +3,8 @@ use num_derive::FromPrimitive;
 use super::word::Word;
 
 extern crate num;
+
+#[derive(Debug,PartialEq, Eq)]
 pub struct DecodedInstruction {
     pub opcode:DcpuInstruction,
     pub operand_b:Option<BOperand>,
@@ -14,9 +16,9 @@ impl TryInto<DecodedInstruction> for Word {
 
     fn try_into(self) -> Result<DecodedInstruction, Self::Error> {
         let bits = *self;
-        let op_a = (bits & 0b111111).try_into().expect("Illegal a-operand!");
-        let op_b = (bits & 0b11111000000) >> 6;
-        let opcode = (bits & 0b1111100000000000) >> 11;
+        let op_a = ((bits & 0b1111110000000000)>>10).try_into().expect("Illegal a-operand!");
+        let op_b = (bits & 0b1111100000) >> 5;
+        let opcode = bits & 0b11111;
         println!("raw bits: {bits:b}; operand a: {:b}; operand b: {op_b:b}; opcode: {opcode:X}",(bits & 0b111111));
         if opcode == 0x00 {
             let instruction:Option<DcpuInstruction> = num::FromPrimitive::from_u16(op_b | 0x20);
@@ -36,6 +38,7 @@ impl TryInto<DecodedInstruction> for Word {
 }
 
 #[repr(u8)]
+#[derive(Debug,PartialEq,Eq)]
 pub enum AOperand {
     RegA = 0x00,
     RegB = 0x01,
@@ -136,7 +139,7 @@ impl TryInto<AOperand> for u16 {
     }
 }
 
-#[derive(FromPrimitive)]
+#[derive(FromPrimitive,Debug,PartialEq, Eq)]
 pub enum BOperand {
     RegA = 0x00,
     RegB = 0x01,
@@ -177,7 +180,7 @@ pub enum BOperand {
     ValueImmediate = 0x1F,
 }
 
-#[derive(FromPrimitive)]
+#[derive(FromPrimitive,Debug,PartialEq,Eq)]
 pub enum DcpuInstruction {
     /// Invalid instruction. May crash the CPU if you like.
     Undefined = 0x40, //For instructions that weren't filled in, like 0x18
@@ -262,4 +265,56 @@ pub enum DcpuInstruction {
     Hwq = 0x11 | 0x20,
     /// sends an interrupt to hardware `a`.
     Hwi = 0x12 | 0x20
+}
+
+#[cfg(test)]
+mod tests {
+    //Each module has its own scope, so import the stuff to test from the parent-scope.
+    use super::*;
+
+    #[test]
+    fn test_parse_operand_a() {
+        assert_eq!(AOperand::StackPointer, 0x1bu16.try_into().unwrap(),"Parse stack-literal for operand a.");
+        assert_eq!(AOperand::Literal(0xffff.into()),0x20u16.try_into().unwrap(),"Parse small literal -1 for operand a.");
+        assert_eq!(AOperand::Literal(0x00.into()),0x21u16.try_into().unwrap(),"Parse small literal 0 for operand a.");
+        assert_eq!(AOperand::Literal(30u16.into()),0x3fu16.try_into().unwrap(),"Parse small literal 30 for operand a.");
+        assert_eq!(Err::<AOperand,()>(()),0x40u16.try_into(),"Parse out-of-range value as operand a.");
+    }
+
+    #[test]
+    fn test_parse_instructions() {
+        assert_eq!(Ok(
+            DecodedInstruction{
+                opcode:DcpuInstruction::Set,
+                operand_b:Some(BOperand::Push),
+                operand_a:AOperand::RegC}),
+            Word::from(0x0b01).try_into(),
+            "Parse instruction SET PUSH C");
+        assert_eq!(Ok(
+            DecodedInstruction{
+                opcode:DcpuInstruction::Jsr,
+                operand_b:None,
+                operand_a:AOperand::ProgramCounter
+            }),
+            Word::from(0x7020).try_into(),
+            "Parse instruction JSR PC");
+        assert_eq!(
+            Err::<DecodedInstruction,()>(()),
+            Word::from(0x001c).try_into(),
+            "Parse non-existant normal instruction.");
+        assert_eq!(
+            Err::<DecodedInstruction,()>(()),
+            Word::from(0x01e0).try_into(),
+            "Parse non-existant special instruction.");
+        // MOD C, 10
+        assert_eq!(Ok(
+            DecodedInstruction{
+                opcode:DcpuInstruction::Mod,
+                operand_b:Some(BOperand::RegC),
+                operand_a:AOperand::Literal(Word::from(10))
+            }),
+            Word::from(0xac48).try_into(),
+            "Parse instruction with small-literal for a operand.");
+        
+    }
 }
