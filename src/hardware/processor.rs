@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use super::word::Word;
 use super::instruction::DecodedInstruction;
 
-pub struct Processor {
+pub struct Registers {
     //General-purpose registers.
     pub reg_a:Word,
     pub reg_b:Word,
@@ -12,7 +12,9 @@ pub struct Processor {
     pub reg_z:Word,
     pub reg_i:Word,
     pub reg_j:Word,
+}
 
+pub struct Processor {
     //"Special" registers.
     program_counter:Word,
     stack_pointer:Word,

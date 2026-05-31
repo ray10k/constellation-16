@@ -7,3 +7,4 @@ edition = "2024"
 num = "0.4.3"
 num-derive = "0.4.2"
 num-traits = "0.2.19"
+raylib = { git = "https://github.com/raylib-rs/raylib-rs", version = "5.7.0", features = ["SUPPORT_FILEFORMAT_PNG", "default", "opengl_43"] }
