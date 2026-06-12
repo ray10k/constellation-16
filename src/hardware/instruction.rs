@@ -6,9 +6,16 @@ extern crate num;
 
 #[derive(Debug,PartialEq, Eq)]
 pub struct DecodedInstruction {
+    /// Instruction to run.
     pub opcode:DcpuInstruction,
+    /// Optional `b` operand; `None` for special operations.
     pub operand_b:Option<BOperand>,
+    /// `a` operand, may contain a small-literal.
     pub operand_a:AOperand,
+    /// Room for storing a fetched value, 0 by default.
+    pub fetched_a:Word,
+    /// Room for storing a fetched value, 0 by default.
+    pub fetched_b:Word
 }
 
 impl TryInto<DecodedInstruction> for Word {
@@ -23,14 +30,27 @@ impl TryInto<DecodedInstruction> for Word {
         if opcode == 0x00 {
             let instruction:Option<DcpuInstruction> = num::FromPrimitive::from_u16(op_b | 0x20);
             match instruction {
-                Some(instruction) => Ok(DecodedInstruction { opcode: instruction, operand_b: None, operand_a: op_a }),
+                Some(instruction) => Ok(
+                    DecodedInstruction { 
+                        opcode: instruction, 
+                        operand_b: None, 
+                        operand_a: op_a, 
+                        fetched_a: 0.into(),
+                        fetched_b: 0.into()}
+                    ),
                 None => Err(()),
             }
         } else {
             let instruction:Option<DcpuInstruction> = num::FromPrimitive::from_u16(opcode);
             let op_b = num::FromPrimitive::from_u16(op_b);
             match instruction {
-                Some(instruction) => Ok(DecodedInstruction { opcode: instruction, operand_b: op_b, operand_a: op_a }),
+                Some(instruction) => Ok(
+                    DecodedInstruction { 
+                        opcode: instruction, 
+                        operand_b: op_b, 
+                        operand_a: op_a,
+                        fetched_a: 0.into(),
+                        fetched_b: 0.into() }),
                 None => Err(())
             }
         }
@@ -139,6 +159,18 @@ impl TryInto<AOperand> for u16 {
     }
 }
 
+impl AOperand {
+    pub fn has_delay(&self) -> bool {
+        match self {
+            AOperand::OffsetA | AOperand::OffsetB | AOperand::OffsetC |
+            AOperand::OffsetX | AOperand::OffsetY | AOperand::OffsetZ |
+            AOperand::OffsetI | AOperand::OffsetJ | AOperand::Pick |
+            AOperand::DerefImmediate | AOperand::ValueImmediate => true,
+            _ => false
+        }
+    }
+}
+
 #[derive(FromPrimitive,Debug,PartialEq, Eq)]
 pub enum BOperand {
     RegA = 0x00,
@@ -178,6 +210,18 @@ pub enum BOperand {
 
     DerefImmediate = 0x1E,
     ValueImmediate = 0x1F,
+}
+
+impl BOperand {
+    pub fn has_delay(&self) -> bool {
+        match self {
+            BOperand::OffsetA | BOperand::OffsetB | BOperand::OffsetC |
+            BOperand::OffsetX | BOperand::OffsetY | BOperand::OffsetZ |
+            BOperand::OffsetI | BOperand::OffsetJ | BOperand::Pick |
+            BOperand::DerefImmediate | BOperand::ValueImmediate => true,
+            _ => false
+        }
+    }
 }
 
 #[derive(FromPrimitive,Debug,PartialEq,Eq)]
@@ -267,6 +311,33 @@ pub enum DcpuInstruction {
     Hwi = 0x12 | 0x20
 }
 
+impl DcpuInstruction {
+    pub fn duration(&self) -> u16 {
+        /// Minimum number of cycles that this instruction takes to execute.
+        match self {
+            Self::Set | Self::And | Self::Bor |
+            Self::Xor | Self::Shr | Self::Asr |
+            Self::Shl | Self::Iag | Self::Ias => 1,
+
+            Self::Add | Self::Sub | Self::Mul |
+            Self::Mli | Self::Ifb | Self::Ifc |
+            Self::Ife | Self::Ifn | Self::Ifg |
+            Self::Ifa | Self::Ifl | Self::Ifu |
+            Self::Sti | Self::Std | Self::Iaq |
+            Self::Hwn => 2,
+
+            Self::Div | Self::Dvi | Self::Mod |
+            Self::Mdi | Self::Adx | Self::Sbx |
+            Self::Jsr | Self::Rfi => 3,
+
+            Self::Int | Self::Hwq | Self::Hwi => 4,
+
+            Self::Undefined => 5
+        }
+        
+    }
+}
+
 #[cfg(test)]
 mod tests {
     //Each module has its own scope, so import the stuff to test from the parent-scope.
@@ -287,14 +358,18 @@ mod tests {
             DecodedInstruction{
                 opcode:DcpuInstruction::Set,
                 operand_b:Some(BOperand::Push),
-                operand_a:AOperand::RegC}),
+                operand_a:AOperand::RegC,
+                fetched_a:0.into(),
+                fetched_b:0.into()}),
             Word::from(0x0b01).try_into(),
             "Parse instruction SET PUSH C");
         assert_eq!(Ok(
             DecodedInstruction{
                 opcode:DcpuInstruction::Jsr,
                 operand_b:None,
-                operand_a:AOperand::ProgramCounter
+                operand_a:AOperand::ProgramCounter,
+                fetched_a:0.into(),
+                fetched_b:0.into()
             }),
             Word::from(0x7020).try_into(),
             "Parse instruction JSR PC");
@@ -311,7 +386,9 @@ mod tests {
             DecodedInstruction{
                 opcode:DcpuInstruction::Mod,
                 operand_b:Some(BOperand::RegC),
-                operand_a:AOperand::Literal(Word::from(10))
+                operand_a:AOperand::Literal(Word::from(10)),
+                fetched_a:0.into(),
+                fetched_b:0.into()
             }),
             Word::from(0xac48).try_into(),
             "Parse instruction with small-literal for a operand.");

@@ -1,7 +1,9 @@
 use std::collections::VecDeque;
-use super::word::Word;
-use super::instruction::DecodedInstruction;
 
+use super::word::Word;
+use super::instruction::{DecodedInstruction,AOperand,BOperand};
+
+#[derive(Default)]
 pub struct Registers {
     //General-purpose registers.
     pub reg_a:Word,
@@ -14,17 +16,27 @@ pub struct Registers {
     pub reg_j:Word,
 }
 
+#[derive(Default)]
 pub struct Processor {
     //"Special" registers.
+    /// Pointer to the next instruction.
     program_counter:Word,
+    /// Pointer to the most recently used stack location.
     stack_pointer:Word,
+    /// Special register that 'catches' mathematical overflows.
     reg_excess:Word,
+    /// Address that program execution jumps to in order to handle an interrupt.
     interrupt_address:Word,
 
+    /// Storage space for unhandled interrupts.
     interrupt_queue:VecDeque<Word>,
+    /// Interrupt state. If `false`, the next tick will handle the front-most interrupt
+    /// (if any are in the queue.)
     queue_incoming_interrupts:bool,
 
+    /// Most recently decoded instruction that has not finished executing.
     current_instruction:Option<DecodedInstruction>,
+    /// Progress towards executing the instruction.
     instruction_state:ProcessorState,
 }
 
@@ -41,4 +53,46 @@ enum ProcessorState {
     SkipCondition,
     /// Some other condition has resulted in a delay. Goes down by 1 until end of instruction.
     Stall(u16)
+}
+
+
+impl Processor {
+    pub fn tick(&mut self, registers:&mut Registers, memory:&mut [Word]) {
+        match self.instruction_state {
+            ProcessorState::Ready => {
+                if !self.queue_incoming_interrupts
+                && !self.interrupt_queue.is_empty(){
+                    todo!("Handle interrupt de-queueing.");
+                    return;
+                }
+                //No waiting interrupts, ready to start executing an instruction. So, decode
+                //the next instruction that PC points at.
+                self.current_instruction = memory[self.program_counter.into() as usize].try_into().ok();
+                //Figure out what further steps (if any) are needed.
+                let instruction = &mut self.current_instruction;
+                match instruction {
+                    None => todo!("Bad instruction handling."),
+                    Some(instruction) 
+                        if instruction.operand_a.has_delay() => {
+                            self.instruction_state = ProcessorState::FetchA
+                    },
+                    Some(instruction) 
+                        if let Some(op_b) = instruction.operand_b 
+                        && op_b.has_delay() => {
+                            instruction.fetched_a = todo!("Fetch `a` operand.");
+                            self.instruction_state = ProcessorState::FetchB
+                    },
+                    Some(instruction) => {
+                        instruction.fetched_a = todo!("Fetch `a` operand.");
+                        instruction.fetched_b = todo!("Fetch `b` operand.");
+                        self.instruction_state = ProcessorState::Stall(instruction.opcode.duration())
+                    }
+                }
+            }
+            ProcessorState::FetchA => todo!(),
+            ProcessorState::FetchB => todo!(),
+            ProcessorState::SkipCondition => todo!(),
+            ProcessorState::Stall(_) => todo!(),
+        }
+    }
 }
