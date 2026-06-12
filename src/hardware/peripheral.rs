@@ -13,6 +13,7 @@ pub trait Peripheral {
     /// calls!
     fn render_size(&self) -> (u32,u32);
 
-    /// Render the current state to the given image, then return said image. The image will be of the size given by render_size().
-    fn render_image(&self, destination:Image) -> Image;
+    /// Render the current state to the given image. The image will be of the size given by render_size(), and may not be
+    /// the same image as was passes last time this function was called.
+    fn render_image(&self, destination:&mut Image);
 }
