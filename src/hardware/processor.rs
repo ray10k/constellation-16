@@ -1,5 +1,7 @@
 use std::collections::VecDeque;
 
+use crate::hardware::instruction::check_for_jump;
+
 use super::word::Word;
 use super::instruction::{DecodedInstruction,AOperand,BOperand};
 
@@ -59,6 +61,7 @@ enum ProcessorState {
 impl Processor {
     pub fn tick(&mut self, registers:&mut Registers, memory:&mut [Word]) {
         match self.instruction_state {
+
             ProcessorState::Ready => {
                 if !self.queue_incoming_interrupts
                 && !self.interrupt_queue.is_empty(){
@@ -67,7 +70,7 @@ impl Processor {
                 }
                 //No waiting interrupts, ready to start executing an instruction. So, decode
                 //the next instruction that PC points at.
-                self.current_instruction = memory[self.program_counter.into() as usize].try_into().ok();
+                self.current_instruction = memory[self.program_counter.to_usize()].try_into().ok();
                 //Figure out what further steps (if any) are needed.
                 let instruction = &mut self.current_instruction;
                 match instruction {
@@ -88,10 +91,46 @@ impl Processor {
                         self.instruction_state = ProcessorState::Stall(instruction.opcode.duration())
                     }
                 }
-            }
-            ProcessorState::FetchA => todo!(),
-            ProcessorState::FetchB => todo!(),
-            ProcessorState::SkipCondition => todo!(),
+            },
+
+            ProcessorState::FetchA => {    
+                let instruction = self.current_instruction.as_mut();
+                match instruction {
+                    None => todo!("Bad instruction handling."),
+                    Some(instruct) => {
+                        instruct.fetched_a = todo!("Fetch `a` operand.");
+                        if let Some(b_op) = instruct.operand_b {
+                            if b_op.has_delay() {
+                                self.instruction_state = ProcessorState::FetchB;
+                            } else {
+                                instruct.fetched_b = todo!("Fetch `b` operand.");
+                                self.instruction_state = ProcessorState::Stall(instruct.opcode.duration());
+                            }
+                        }
+                    }
+                }
+            },
+
+            ProcessorState::FetchB => {
+                let instruction = self.current_instruction.as_mut();
+                match instruction {
+                    None => todo!("Bad instruction handling."),
+                    Some(instruct) => {
+                        instruct.fetched_b = todo!("Fetch `b` operand.");
+                        self.instruction_state = ProcessorState::Stall(instruct.opcode.duration());
+                    }
+                }
+            },
+
+            ProcessorState::SkipCondition => {
+                //May need to skip multiple instructions.
+                if check_for_jump(memory[self.program_counter.to_usize()]) {
+                    let next_instruction:DecodedInstruction = memory[self.program_counter.to_usize()].try_into().expect("Error when decoding instruction to be skipped.");
+                    self.program_counter += next_instruction.word_size();
+                } else {
+                    self.instruction_state = ProcessorState::Ready;
+                }
+            },
             ProcessorState::Stall(_) => todo!(),
         }
     }

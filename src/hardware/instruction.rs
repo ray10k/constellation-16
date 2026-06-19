@@ -57,6 +57,23 @@ impl TryInto<DecodedInstruction> for Word {
     }
 }
 
+impl DecodedInstruction {
+    pub fn word_size(&self) -> u16 {
+        ///Total number of Words consumed by this instruction.
+        /// Can be 1, 2 or 3 depending on operands.
+        let mut retval = 1;
+        if self.operand_a.has_delay() {
+            retval += 1;
+        }
+        if let Some(op_b) = &self.operand_b
+            && op_b.has_delay() {
+                retval += 1;
+        }
+
+        retval
+    }
+}
+
 #[repr(u8)]
 #[derive(Debug,PartialEq,Eq)]
 pub enum AOperand {
@@ -309,6 +326,12 @@ pub enum DcpuInstruction {
     Hwq = 0x11 | 0x20,
     /// sends an interrupt to hardware `a`.
     Hwi = 0x12 | 0x20
+}
+
+pub fn check_for_jump(next_word:Word)-> bool {
+    ///Checks if a given 16-bit value will decode to a conditional execution instruction.
+    let opcode:u16 = (next_word & 0b11111).into();
+    opcode >= 0x10 && opcode <= 0x17
 }
 
 impl DcpuInstruction {
