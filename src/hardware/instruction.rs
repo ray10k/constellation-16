@@ -4,7 +4,7 @@ use super::word::Word;
 
 extern crate num;
 
-#[derive(Debug,PartialEq, Eq)]
+#[derive(Debug,PartialEq, Eq, Clone)]
 pub struct DecodedInstruction {
     /// Instruction to run.
     pub opcode:DcpuInstruction,
@@ -75,7 +75,7 @@ impl DecodedInstruction {
 }
 
 #[repr(u8)]
-#[derive(Debug,PartialEq,Eq)]
+#[derive(Debug,PartialEq,Eq,Clone)]
 pub enum AOperand {
     RegA = 0x00,
     RegB = 0x01,
@@ -188,7 +188,7 @@ impl AOperand {
     }
 }
 
-#[derive(FromPrimitive,Debug,PartialEq, Eq)]
+#[derive(FromPrimitive,Debug,PartialEq, Eq, Clone)]
 pub enum BOperand {
     RegA = 0x00,
     RegB = 0x01,
@@ -241,7 +241,7 @@ impl BOperand {
     }
 }
 
-#[derive(FromPrimitive,Debug,PartialEq,Eq)]
+#[derive(FromPrimitive,Debug,PartialEq,Eq,Clone)]
 pub enum DcpuInstruction {
     /// Invalid instruction. May crash the CPU if you like.
     Undefined = 0x40, //For instructions that weren't filled in, like 0x18

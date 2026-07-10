@@ -1,4 +1,6 @@
 use std::collections::VecDeque;
+use std::rc::Rc;
+use std::cell::{RefCell, RefMut};
 
 use crate::hardware::instruction::check_for_jump;
 
@@ -57,6 +59,12 @@ enum ProcessorState {
     Stall(u16)
 }
 
+pub fn processor_step(mut processor:Processor, mut registers:Registers, memory: &mut [Word]) -> 
+    (Processor, Registers) {
+    let mem_ref = Rc::new(RefCell::new(memory));
+
+    (processor, registers)
+}
 
 impl Processor {
     pub fn tick(&mut self, registers:&mut Registers, memory:&mut [Word]) {
@@ -69,10 +77,10 @@ impl Processor {
                 }
                 //No waiting interrupts, ready to start executing an instruction. So, decode
                 //the next instruction that PC points at.
-                self.current_instruction = memory[self.program_counter.to_usize()].try_into().ok();
+                let mut instruction: Option<DecodedInstruction>  = memory[self.program_counter.to_usize()].try_into().ok();
                 //Figure out what further steps (if any) are needed.
-                let instruction = &mut self.current_instruction;
-                match instruction {
+                
+                match instruction.as_mut() {
                     None => todo!("Bad instruction handling."),
                     Some(instruction) 
                         if instruction.operand_a.has_delay() => {
@@ -95,6 +103,7 @@ impl Processor {
                         processor.instruction_state = ProcessorState::Stall(instruction.opcode.duration())
                     }
                 }
+                self.current_instruction = instruction;
             },
 
             ProcessorState::FetchA => {    
