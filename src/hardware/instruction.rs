@@ -328,6 +328,16 @@ pub enum DcpuInstruction {
     Hwi = 0x12 | 0x20
 }
 
+impl DcpuInstruction {
+    pub fn is_special(&self) -> bool {
+        match self {
+            Self::Jsr|Self::Int|Self::Iag|Self::Rfi|Self::Iaq|Self::Hwn|Self::Hwq|Self::Hwi =>
+            true,
+            _ => false
+        }
+    }
+}
+
 pub fn check_for_jump(next_word:Word)-> bool {
     ///Checks if a given 16-bit value will decode to a conditional execution instruction.
     let opcode:u16 = (next_word & 0b11111).into();

@@ -1,4 +1,4 @@
-use crate::hardware::{processor::Processor, word::Word};
+use crate::hardware::{processor::ProcessorHiddenState, word::Word};
 use raylib::core::texture::Image;
 
 pub trait Peripheral {
@@ -7,7 +7,7 @@ pub trait Peripheral {
 
     /// Called after the processor has performed a hardware interrupt targeting this peripheral. Must return the number
     /// of additional cycles that the processor gets stalled for, even if this is 0 additional cycles.
-    fn interrupt(&mut self, memory:&mut [Word], registers:&mut Processor) -> u16;
+    fn interrupt(&mut self, memory:&mut [Word], registers:&mut ProcessorHiddenState) -> u16;
 
     /// Should return the width and height of the display image for this peripheral. Must remain consistent between
     /// calls!
