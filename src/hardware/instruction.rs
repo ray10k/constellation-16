@@ -4,18 +4,18 @@ use super::word::Word;
 
 extern crate num;
 
-#[derive(Debug,PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct DecodedInstruction {
     /// Instruction to run.
-    pub opcode:DcpuInstruction,
+    pub opcode: DcpuInstruction,
     /// Optional `b` operand; `None` for special operations.
-    pub operand_b:Option<BOperand>,
+    pub operand_b: Option<BOperand>,
     /// `a` operand, may contain a small-literal.
-    pub operand_a:AOperand,
+    pub operand_a: AOperand,
     /// Room for storing a fetched value, 0 by default.
-    pub fetched_a:Word,
+    pub fetched_a: Word,
     /// Room for storing a fetched value, 0 by default.
-    pub fetched_b:Word
+    pub fetched_b: Word,
 }
 
 impl TryInto<DecodedInstruction> for Word {
@@ -23,51 +23,56 @@ impl TryInto<DecodedInstruction> for Word {
 
     fn try_into(self) -> Result<DecodedInstruction, Self::Error> {
         let bits = *self;
-        let op_a = ((bits & 0b1111110000000000)>>10).try_into().expect("Illegal a-operand!");
+        let op_a = ((bits & 0b1111110000000000) >> 10)
+            .try_into()
+            .expect("Illegal a-operand!");
         let op_b = (bits & 0b1111100000) >> 5;
         let opcode = bits & 0b11111;
-        println!("raw bits: {bits:b}; operand a: {:b}; operand b: {op_b:b}; opcode: {opcode:X}",(bits & 0b111111));
+        println!(
+            "raw bits: {bits:b}; operand a: {:b}; operand b: {op_b:b}; opcode: {opcode:X}",
+            (bits & 0b111111)
+        );
         if opcode == 0x00 {
-            let instruction:Option<DcpuInstruction> = num::FromPrimitive::from_u16(op_b | 0x20);
+            let instruction: Option<DcpuInstruction> = num::FromPrimitive::from_u16(op_b | 0x20);
             match instruction {
-                Some(instruction) => Ok(
-                    DecodedInstruction { 
-                        opcode: instruction, 
-                        operand_b: None, 
-                        operand_a: op_a, 
-                        fetched_a: 0.into(),
-                        fetched_b: 0.into()}
-                    ),
+                Some(instruction) => Ok(DecodedInstruction {
+                    opcode: instruction,
+                    operand_b: None,
+                    operand_a: op_a,
+                    fetched_a: 0.into(),
+                    fetched_b: 0.into(),
+                }),
                 None => Err(()),
             }
         } else {
-            let instruction:Option<DcpuInstruction> = num::FromPrimitive::from_u16(opcode);
+            let instruction: Option<DcpuInstruction> = num::FromPrimitive::from_u16(opcode);
             let op_b = num::FromPrimitive::from_u16(op_b);
             match instruction {
-                Some(instruction) => Ok(
-                    DecodedInstruction { 
-                        opcode: instruction, 
-                        operand_b: op_b, 
-                        operand_a: op_a,
-                        fetched_a: 0.into(),
-                        fetched_b: 0.into() }),
-                None => Err(())
+                Some(instruction) => Ok(DecodedInstruction {
+                    opcode: instruction,
+                    operand_b: op_b,
+                    operand_a: op_a,
+                    fetched_a: 0.into(),
+                    fetched_b: 0.into(),
+                }),
+                None => Err(()),
             }
         }
     }
 }
 
 impl DecodedInstruction {
+    ///Total number of Words consumed by this instruction.
+    /// Can be 1, 2 or 3 depending on operands.
     pub fn word_size(&self) -> u16 {
-        ///Total number of Words consumed by this instruction.
-        /// Can be 1, 2 or 3 depending on operands.
         let mut retval = 1;
         if self.operand_a.has_delay() {
             retval += 1;
         }
         if let Some(op_b) = &self.operand_b
-            && op_b.has_delay() {
-                retval += 1;
+            && op_b.has_delay()
+        {
+            retval += 1;
         }
 
         retval
@@ -75,7 +80,7 @@ impl DecodedInstruction {
 }
 
 #[repr(u8)]
-#[derive(Debug,PartialEq,Eq,Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum AOperand {
     RegA = 0x00,
     RegB = 0x01,
@@ -85,7 +90,7 @@ pub enum AOperand {
     RegZ = 0x05,
     RegI = 0x06,
     RegJ = 0x07,
-    
+
     DerefA = 0x08,
     DerefB = 0x09,
     DerefC = 0x0A,
@@ -171,7 +176,7 @@ impl TryInto<AOperand> for u16 {
             0x1e => Ok(AOperand::DerefImmediate),
             0x1f => Ok(AOperand::ValueImmediate),
 
-            _ => panic!("Unreachable variant!")
+            _ => panic!("Unreachable variant!"),
         }
     }
 }
@@ -179,16 +184,23 @@ impl TryInto<AOperand> for u16 {
 impl AOperand {
     pub fn has_delay(&self) -> bool {
         match self {
-            AOperand::OffsetA | AOperand::OffsetB | AOperand::OffsetC |
-            AOperand::OffsetX | AOperand::OffsetY | AOperand::OffsetZ |
-            AOperand::OffsetI | AOperand::OffsetJ | AOperand::Pick |
-            AOperand::DerefImmediate | AOperand::ValueImmediate => true,
-            _ => false
+            AOperand::OffsetA
+            | AOperand::OffsetB
+            | AOperand::OffsetC
+            | AOperand::OffsetX
+            | AOperand::OffsetY
+            | AOperand::OffsetZ
+            | AOperand::OffsetI
+            | AOperand::OffsetJ
+            | AOperand::Pick
+            | AOperand::DerefImmediate
+            | AOperand::ValueImmediate => true,
+            _ => false,
         }
     }
 }
 
-#[derive(FromPrimitive,Debug,PartialEq, Eq, Clone)]
+#[derive(FromPrimitive, Debug, PartialEq, Eq, Clone)]
 pub enum BOperand {
     RegA = 0x00,
     RegB = 0x01,
@@ -198,7 +210,7 @@ pub enum BOperand {
     RegZ = 0x05,
     RegI = 0x06,
     RegJ = 0x07,
-    
+
     DerefA = 0x08,
     DerefB = 0x09,
     DerefC = 0x0A,
@@ -232,16 +244,23 @@ pub enum BOperand {
 impl BOperand {
     pub fn has_delay(&self) -> bool {
         match self {
-            BOperand::OffsetA | BOperand::OffsetB | BOperand::OffsetC |
-            BOperand::OffsetX | BOperand::OffsetY | BOperand::OffsetZ |
-            BOperand::OffsetI | BOperand::OffsetJ | BOperand::Pick |
-            BOperand::DerefImmediate | BOperand::ValueImmediate => true,
-            _ => false
+            BOperand::OffsetA
+            | BOperand::OffsetB
+            | BOperand::OffsetC
+            | BOperand::OffsetX
+            | BOperand::OffsetY
+            | BOperand::OffsetZ
+            | BOperand::OffsetI
+            | BOperand::OffsetJ
+            | BOperand::Pick
+            | BOperand::DerefImmediate
+            | BOperand::ValueImmediate => true,
+            _ => false,
         }
     }
 }
 
-#[derive(FromPrimitive,Debug,PartialEq,Eq,Clone)]
+#[derive(FromPrimitive, Debug, PartialEq, Eq, Clone)]
 pub enum DcpuInstruction {
     /// Invalid instruction. May crash the CPU if you like.
     Undefined = 0x40, //For instructions that weren't filled in, like 0x18
@@ -255,10 +274,10 @@ pub enum DcpuInstruction {
     Mul = 0x04,
     /// sets `b` to `b*a`, sets EX to `((b*a)>>16)&0xffff` (treats `b`,`a` as signed)
     Mli = 0x05,
-    /// sets `b` to `b/a`, sets EX to `((b<<16)/a)&0xffff`. if `a==0`, 
+    /// sets `b` to `b/a`, sets EX to `((b<<16)/a)&0xffff`. if `a==0`,
     /// sets `b` and EX to 0 instead. (treats `b`, `a` as unsigned)
     Div = 0x06,
-    /// sets `b` to `b/a`, sets EX to `((b<<16)/a)&0xffff`. if `a==0`, 
+    /// sets `b` to `b/a`, sets EX to `((b<<16)/a)&0xffff`. if `a==0`,
     /// sets `b` and EX to 0 instead. (treats `b`, `a` as signed)
     Dvi = 0x07,
     /// sets `b` to `b%a`. if `a==0`, sets `b` to 0 instead.
@@ -273,7 +292,7 @@ pub enum DcpuInstruction {
     Xor = 0x0c,
     /// sets `b` to `b>>>a`, sets EX to `((b<<16)>>a)&0xffff` (logical shift; shifts in 0s from the left.)
     Shr = 0x0d,
-    /// sets `b` to `b>>a`, sets EX to `((b<<16)>>>a)&0xffff` 
+    /// sets `b` to `b>>a`, sets EX to `((b<<16)>>>a)&0xffff`
     /// (arithemtic shift; shifts the original MSB in from the left.)
     Asr = 0x0e,
     /// sets `b` to `b<<a`, sets EX to `((b<<a)>>16)&0xffff`
@@ -311,10 +330,10 @@ pub enum DcpuInstruction {
     Iag = 0x09 | 0x20,
     /// sets IA to `a`
     Ias = 0x0a | 0x20,
-    /// disables interrupt queueing, pops A from the stack, then pops PC from the stack. 
+    /// disables interrupt queueing, pops A from the stack, then pops PC from the stack.
     /// `a` operand is not used in this.
     Rfi = 0x0b | 0x20,
-    /// if `a` is nonzero, interrupts will be added to the queue instead of triggered. if 
+    /// if `a` is nonzero, interrupts will be added to the queue instead of triggered. if
     /// `a` is zero, interrupts will be triggered as normal again.
     Iaq = 0x0c | 0x20,
     /// sets `a` to number of connected hardware devices
@@ -325,49 +344,75 @@ pub enum DcpuInstruction {
     /// `X+(Y<<16)` is a 32 bit word identifying the manufacturer.
     Hwq = 0x11 | 0x20,
     /// sends an interrupt to hardware `a`.
-    Hwi = 0x12 | 0x20
+    Hwi = 0x12 | 0x20,
 }
 
 impl DcpuInstruction {
     pub fn is_special(&self) -> bool {
         match self {
-            Self::Jsr|Self::Int|Self::Iag|Self::Rfi|Self::Iaq|Self::Hwn|Self::Hwq|Self::Hwi =>
-            true,
-            _ => false
+            Self::Jsr
+            | Self::Int
+            | Self::Iag
+            | Self::Rfi
+            | Self::Iaq
+            | Self::Hwn
+            | Self::Hwq
+            | Self::Hwi => true,
+            _ => false,
         }
     }
 }
 
-pub fn check_for_jump(next_word:Word)-> bool {
-    ///Checks if a given 16-bit value will decode to a conditional execution instruction.
-    let opcode:u16 = (next_word & 0b11111).into();
+///Checks if a given 16-bit value will decode to a conditional execution instruction.
+pub fn check_for_jump(next_word: Word) -> bool {
+    let opcode: u16 = (next_word & 0b11111).into();
     opcode >= 0x10 && opcode <= 0x17
 }
 
 impl DcpuInstruction {
+    /// Minimum number of cycles that this instruction takes to execute.
     pub fn duration(&self) -> u16 {
-        /// Minimum number of cycles that this instruction takes to execute.
         match self {
-            Self::Set | Self::And | Self::Bor |
-            Self::Xor | Self::Shr | Self::Asr |
-            Self::Shl | Self::Iag | Self::Ias => 1,
+            Self::Set
+            | Self::And
+            | Self::Bor
+            | Self::Xor
+            | Self::Shr
+            | Self::Asr
+            | Self::Shl
+            | Self::Iag
+            | Self::Ias => 1,
 
-            Self::Add | Self::Sub | Self::Mul |
-            Self::Mli | Self::Ifb | Self::Ifc |
-            Self::Ife | Self::Ifn | Self::Ifg |
-            Self::Ifa | Self::Ifl | Self::Ifu |
-            Self::Sti | Self::Std | Self::Iaq |
-            Self::Hwn => 2,
+            Self::Add
+            | Self::Sub
+            | Self::Mul
+            | Self::Mli
+            | Self::Ifb
+            | Self::Ifc
+            | Self::Ife
+            | Self::Ifn
+            | Self::Ifg
+            | Self::Ifa
+            | Self::Ifl
+            | Self::Ifu
+            | Self::Sti
+            | Self::Std
+            | Self::Iaq
+            | Self::Hwn => 2,
 
-            Self::Div | Self::Dvi | Self::Mod |
-            Self::Mdi | Self::Adx | Self::Sbx |
-            Self::Jsr | Self::Rfi => 3,
+            Self::Div
+            | Self::Dvi
+            | Self::Mod
+            | Self::Mdi
+            | Self::Adx
+            | Self::Sbx
+            | Self::Jsr
+            | Self::Rfi => 3,
 
             Self::Int | Self::Hwq | Self::Hwi => 4,
 
-            Self::Undefined => 5
+            Self::Undefined => 5,
         }
-        
     }
 }
 
@@ -378,53 +423,78 @@ mod tests {
 
     #[test]
     fn test_parse_operand_a() {
-        assert_eq!(AOperand::StackPointer, 0x1bu16.try_into().unwrap(),"Parse stack-literal for operand a.");
-        assert_eq!(AOperand::Literal(0xffff.into()),0x20u16.try_into().unwrap(),"Parse small literal -1 for operand a.");
-        assert_eq!(AOperand::Literal(0x00.into()),0x21u16.try_into().unwrap(),"Parse small literal 0 for operand a.");
-        assert_eq!(AOperand::Literal(30u16.into()),0x3fu16.try_into().unwrap(),"Parse small literal 30 for operand a.");
-        assert_eq!(Err::<AOperand,()>(()),0x40u16.try_into(),"Parse out-of-range value as operand a.");
+        assert_eq!(
+            AOperand::StackPointer,
+            0x1bu16.try_into().unwrap(),
+            "Parse stack-literal for operand a."
+        );
+        assert_eq!(
+            AOperand::Literal(0xffff.into()),
+            0x20u16.try_into().unwrap(),
+            "Parse small literal -1 for operand a."
+        );
+        assert_eq!(
+            AOperand::Literal(0x00.into()),
+            0x21u16.try_into().unwrap(),
+            "Parse small literal 0 for operand a."
+        );
+        assert_eq!(
+            AOperand::Literal(30u16.into()),
+            0x3fu16.try_into().unwrap(),
+            "Parse small literal 30 for operand a."
+        );
+        assert_eq!(
+            Err::<AOperand, ()>(()),
+            0x40u16.try_into(),
+            "Parse out-of-range value as operand a."
+        );
     }
 
     #[test]
     fn test_parse_instructions() {
-        assert_eq!(Ok(
-            DecodedInstruction{
-                opcode:DcpuInstruction::Set,
-                operand_b:Some(BOperand::Push),
-                operand_a:AOperand::RegC,
-                fetched_a:0.into(),
-                fetched_b:0.into()}),
+        assert_eq!(
+            Ok(DecodedInstruction {
+                opcode: DcpuInstruction::Set,
+                operand_b: Some(BOperand::Push),
+                operand_a: AOperand::RegC,
+                fetched_a: 0.into(),
+                fetched_b: 0.into()
+            }),
             Word::from(0x0b01).try_into(),
-            "Parse instruction SET PUSH C");
-        assert_eq!(Ok(
-            DecodedInstruction{
-                opcode:DcpuInstruction::Jsr,
-                operand_b:None,
-                operand_a:AOperand::ProgramCounter,
-                fetched_a:0.into(),
-                fetched_b:0.into()
+            "Parse instruction SET PUSH C"
+        );
+        assert_eq!(
+            Ok(DecodedInstruction {
+                opcode: DcpuInstruction::Jsr,
+                operand_b: None,
+                operand_a: AOperand::ProgramCounter,
+                fetched_a: 0.into(),
+                fetched_b: 0.into()
             }),
             Word::from(0x7020).try_into(),
-            "Parse instruction JSR PC");
+            "Parse instruction JSR PC"
+        );
         assert_eq!(
-            Err::<DecodedInstruction,()>(()),
+            Err::<DecodedInstruction, ()>(()),
             Word::from(0x001c).try_into(),
-            "Parse non-existant normal instruction.");
+            "Parse non-existant normal instruction."
+        );
         assert_eq!(
-            Err::<DecodedInstruction,()>(()),
+            Err::<DecodedInstruction, ()>(()),
             Word::from(0x01e0).try_into(),
-            "Parse non-existant special instruction.");
+            "Parse non-existant special instruction."
+        );
         // MOD C, 10
-        assert_eq!(Ok(
-            DecodedInstruction{
-                opcode:DcpuInstruction::Mod,
-                operand_b:Some(BOperand::RegC),
-                operand_a:AOperand::Literal(Word::from(10)),
-                fetched_a:0.into(),
-                fetched_b:0.into()
+        assert_eq!(
+            Ok(DecodedInstruction {
+                opcode: DcpuInstruction::Mod,
+                operand_b: Some(BOperand::RegC),
+                operand_a: AOperand::Literal(Word::from(10)),
+                fetched_a: 0.into(),
+                fetched_b: 0.into()
             }),
             Word::from(0xac48).try_into(),
-            "Parse instruction with small-literal for a operand.");
-        
+            "Parse instruction with small-literal for a operand."
+        );
     }
 }

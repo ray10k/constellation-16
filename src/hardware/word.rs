@@ -1,21 +1,20 @@
-use std::ops::{AddAssign, SubAssign, BitAnd, Deref, DerefMut};
+use std::ops::{AddAssign, BitAnd, Deref, DerefMut, SubAssign};
 
-
-#[derive(Debug,PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
 pub struct Word(u16);
 
 impl Deref for Word {
     type Target = u16;
-    
+
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl DerefMut for Word {    
+impl DerefMut for Word {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
-    } 
+    }
 }
 
 impl From<u16> for Word {
@@ -31,7 +30,7 @@ impl From<Word> for u16 {
 }
 
 impl BitAnd<u16> for Word {
-    type Output=Self;
+    type Output = Self;
 
     fn bitand(self, rhs: u16) -> Self::Output {
         Self(self.0 & rhs)
