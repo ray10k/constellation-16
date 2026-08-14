@@ -46,6 +46,7 @@ struct ProcessorHiddenState {
     instruction_state: TickStep,
 }
 
+#[derive(Default)]
 pub struct VirtualCpu {
     pub registers: Registers,
     hidden_state: ProcessorHiddenState,
@@ -66,14 +67,32 @@ enum TickStep {
     Stall(u16),
 }
 
+#[derive(Clone, PartialEq, Eq, Debug)]
+enum TickResult {
+    /// An instruction has been partially executed. Next tick will continue execution of this instruction.
+    PartialInstr,
+    /// An instruction finished. Next tick may either start the next instruction, or handle a pending interrupt.
+    Instruction,
+    /// A `HWQ` instruction finished. Same as `Instruction` variant, but information about the given peripheral
+    /// must be written to the registers.
+    QueryHardware(Word),
+    /// A `HWN` instruction finished. Same as `Instruction` variant, but the number of connected peripherals
+    /// must be written to the given target.
+    NumberHardware(AOperand),
+    /// A `HWI` instruction finished. Same as `Instruction` variant, but the peripheral at the indicated address
+    /// must receive an interrupt.
+    InterruptHardware(Word)
+}
+
 impl VirtualCpu {
     /// Update the state of the processor by one clock-step. This may result in an instruction
     /// executing all in one go, or result in part of the instruction getting executed for
     /// longer-running operations.
     ///
-    /// Returns the `VirtualCpu` itself, and if parsing the instruction failed, the value that
-    /// caused the parse-failure.
-    pub fn processor_step(mut self, memory: Memory) -> (Self, Option<Word>) {
+    /// Returns the `VirtualCpu` itself, and the outcome of the current processor-tick.
+    /// If the Word that the program counter points at could not be interpreted as an
+    /// instruction, the `Err` variant is returned.
+    pub fn processor_step(mut self, memory: Memory) -> (Self, Result<TickResult,Word>) {
         loop {
             let tick_step = self.hidden_state.instruction_state.clone();
             match tick_step {
@@ -92,7 +111,7 @@ impl VirtualCpu {
                     .ok();
                     if let None = instruction {
                         let err_location = self.hidden_state.program_counter.to_usize();
-                        return (self, Some(memory.borrow()[err_location]));
+                        return (self, Err(memory.borrow()[err_location]));
                     }
                     self.hidden_state.current_instruction = instruction;
                     self.hidden_state.instruction_state = TickStep::FetchA;
@@ -167,7 +186,7 @@ impl VirtualCpu {
             }
         }
 
-        (self, None)
+        (self, Ok(TickResult::PartialInstr))
     }
 
     fn fetch_a_value(&mut self, operand: AOperand, memory: Memory) -> Word {
@@ -412,5 +431,33 @@ impl VirtualCpu {
             }
         };
         retval
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_basic_execute() {
+        let mut memory = [Word(0);0xffff];
+        memory[0] = (0x08 | (0x01<<5)).into(); //MOD B, A
+        let memory = Rc::new(RefCell::new(memory));
+        let mut processor = VirtualCpu::default();
+        let (mut processor, tick_result) = processor.processor_step(Rc::clone(&memory));
+        assert_eq!(
+            Ok(TickResult::PartialInstr),
+            tick_result
+        );
+        let (mut processor, tick_result) = processor.processor_step(Rc::clone(&memory));
+        assert_eq!(
+            Ok(TickResult::PartialInstr),
+            tick_result
+        );
+        let (mut processor, tick_result) = processor.processor_step(Rc::clone(&memory));
+        assert_eq!(
+            Ok(TickResult::Instruction),
+            tick_result
+        );
     }
 }

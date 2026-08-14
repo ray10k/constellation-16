@@ -1,7 +1,7 @@
 use std::ops::{AddAssign, BitAnd, Deref, DerefMut, SubAssign};
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
-pub struct Word(u16);
+pub struct Word(pub u16);
 
 impl Deref for Word {
     type Target = u16;
