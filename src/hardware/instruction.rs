@@ -30,7 +30,7 @@ impl TryInto<DecodedInstruction> for Word {
         let opcode = bits & 0b11111;
         println!(
             "raw bits: {bits:b}; operand a: {:b}; operand b: {op_b:b}; opcode: {opcode:X}",
-            (bits & 0b111111)
+            (bits & 0b1111110000000000) >> 10
         );
         if opcode == 0x00 {
             let instruction: Option<DcpuInstruction> = num::FromPrimitive::from_u16(op_b | 0x20);
@@ -359,6 +359,54 @@ impl DcpuInstruction {
             | Self::Hwq
             | Self::Hwi => true,
             _ => false,
+        }
+    }
+
+    pub fn run_instruction(&self, operand_a:Word, operand_b:Word) -> Option<Word> {
+        match self {
+            DcpuInstruction::Undefined =>  None,
+            DcpuInstruction::Set => Some(operand_a),
+            DcpuInstruction::Add => Some(operand_a.wrapping_add(*operand_b).into()),
+            DcpuInstruction::Sub => Some(operand_a.wrapping_sub(*operand_b).into()),
+            DcpuInstruction::Mul => Some(operand_a.wrapping_mul(*operand_b).into()),
+            DcpuInstruction::Mli => {
+                let signed_a = operand_a.cast_signed();
+                let signed_b = operand_b.cast_signed();
+                Some(signed_a.wrapping_mul(signed_b).into())
+            },
+            DcpuInstruction::Div => Some(operand_a.wrapping_div(*operand_b).into()),
+            DcpuInstruction::Dvi => {
+                todo!()
+            }
+            DcpuInstruction::Mod => todo!(),
+            DcpuInstruction::Mdi => todo!(),
+            DcpuInstruction::And => todo!(),
+            DcpuInstruction::Bor => todo!(),
+            DcpuInstruction::Xor => todo!(),
+            DcpuInstruction::Shr => todo!(),
+            DcpuInstruction::Asr => todo!(),
+            DcpuInstruction::Shl => todo!(),
+            DcpuInstruction::Ifb => todo!(),
+            DcpuInstruction::Ifc => todo!(),
+            DcpuInstruction::Ife => todo!(),
+            DcpuInstruction::Ifn => todo!(),
+            DcpuInstruction::Ifg => todo!(),
+            DcpuInstruction::Ifa => todo!(),
+            DcpuInstruction::Ifl => todo!(),
+            DcpuInstruction::Ifu => todo!(),
+            DcpuInstruction::Adx => todo!(),
+            DcpuInstruction::Sbx => todo!(),
+            DcpuInstruction::Sti => todo!(),
+            DcpuInstruction::Std => todo!(),
+            DcpuInstruction::Jsr => todo!(),
+            DcpuInstruction::Int => todo!(),
+            DcpuInstruction::Iag => todo!(),
+            DcpuInstruction::Ias => todo!(),
+            DcpuInstruction::Rfi => todo!(),
+            DcpuInstruction::Iaq => todo!(),
+            DcpuInstruction::Hwn => todo!(),
+            DcpuInstruction::Hwq => todo!(),
+            DcpuInstruction::Hwi => todo!(),
         }
     }
 }
