@@ -2,12 +2,12 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
-use crate::hardware::processor::TickStep::{FetchB, Stall};
+use crate::hardware::processor::TickStep::{FetchB, Ready, Stall};
 
 use super::instruction::{AOperand, BOperand, DecodedInstruction};
 use super::word::Word;
 
-type Memory = Rc<RefCell<[Word]>>;
+type Memory = Rc<RefCell<Box<[Word]>>>;
 
 #[derive(Default)]
 pub struct Registers {
@@ -52,7 +52,7 @@ pub struct VirtualCpu {
     hidden_state: ProcessorHiddenState,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 enum TickStep {
     #[default]
     /// The processor is at the start of the current instruction.
@@ -81,7 +81,7 @@ enum TickResult {
     NumberHardware(AOperand),
     /// A `HWI` instruction finished. Same as `Instruction` variant, but the peripheral at the indicated address
     /// must receive an interrupt.
-    InterruptHardware(Word)
+    InterruptHardware(Word),
 }
 
 impl VirtualCpu {
@@ -92,9 +92,10 @@ impl VirtualCpu {
     /// Returns the `VirtualCpu` itself, and the outcome of the current processor-tick.
     /// If the Word that the program counter points at could not be interpreted as an
     /// instruction, the `Err` variant is returned.
-    pub fn processor_step(mut self, memory: Memory) -> (Self, Result<TickResult,Word>) {
+    pub fn processor_step(mut self, memory: Memory) -> (Self, Result<TickResult, Word>) {
         loop {
             let tick_step = self.hidden_state.instruction_state.clone();
+            println!("{:?}",tick_step);
             match tick_step {
                 TickStep::Ready => {
                     //Check if an interrupt is waiting and needs to be handled first!
@@ -174,7 +175,7 @@ impl VirtualCpu {
 
                     //Next step planning time again!
                     //This time, the only decision is 'Does the `b` operand incur a delay?'
-                    self.hidden_state.instruction_state = Stall(opcode.duration());
+                    self.hidden_state.instruction_state = Stall(opcode.duration() - 1);
 
                     if operand.has_delay() {
                         break;
@@ -182,7 +183,8 @@ impl VirtualCpu {
                     continue;
                 }
                 TickStep::SkipCondition => todo!(),
-                TickStep::Stall(_) => todo!(),
+                TickStep::Stall(0) => {self.hidden_state.instruction_state = Ready; return (self, Ok(TickResult::Instruction))},
+                TickStep::Stall(x) => {self.hidden_state.instruction_state = Stall(x - 1); break},
             }
         }
 
@@ -440,24 +442,15 @@ mod tests {
 
     #[test]
     fn test_basic_execute() {
-        let mut memory = [Word(0);0xffff];
-        memory[0] = (0x08 | (0x01<<5)).into(); //MOD B, A
+        let mut memory:Box<[Word]> = Box::from([Word(0); 0xffff]);
+        memory[0] = (0x08 | (0x01 << 5)).into(); //MOD B, A
         let memory = Rc::new(RefCell::new(memory));
         let mut processor = VirtualCpu::default();
         let (mut processor, tick_result) = processor.processor_step(Rc::clone(&memory));
-        assert_eq!(
-            Ok(TickResult::PartialInstr),
-            tick_result
-        );
+        assert_eq!(Ok(TickResult::PartialInstr), tick_result);
         let (mut processor, tick_result) = processor.processor_step(Rc::clone(&memory));
-        assert_eq!(
-            Ok(TickResult::PartialInstr),
-            tick_result
-        );
+        assert_eq!(Ok(TickResult::PartialInstr), tick_result);
         let (mut processor, tick_result) = processor.processor_step(Rc::clone(&memory));
-        assert_eq!(
-            Ok(TickResult::Instruction),
-            tick_result
-        );
+        assert_eq!(Ok(TickResult::Instruction), tick_result);
     }
 }
