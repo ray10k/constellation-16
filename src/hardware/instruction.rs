@@ -1,4 +1,6 @@
+use num::Integer;
 use num_derive::FromPrimitive;
+use num_traits::Euclid;
 
 use super::word::Word;
 
@@ -347,6 +349,27 @@ pub enum DcpuInstruction {
     Hwi = 0x12 | 0x20,
 }
 
+pub enum InstructionResult {
+    /// Executing the instruction did not result in any kind of special result.
+    None,
+    /// Executing the instruction resulted in some numerical result, which will
+    /// need to be stored.
+    Value { val: Word },
+    /// Executing the instruction resulted in some numerical value, and set the EX
+    /// register to a new value.
+    ValueCarry { val: Word, ex: Word },
+    /// The instruction was `STI`, and both the I and J registers need to be incremented.
+    ValueIncrement { val: Word },
+    /// The instruction was `STD`, and both the I and J registers need to be decremented.
+    ValueDecrement { val: Word },
+    /// The instruction was a conditional jump, and the condition was *not* met; one
+    /// instruction will need to be skipped.
+    Skip,
+    /// The instruction was a "special" instruction. Inspect, and update the processor
+    /// internal state accordingly.
+    Special,
+}
+
 impl DcpuInstruction {
     pub fn is_special(&self) -> bool {
         match self {
@@ -362,24 +385,103 @@ impl DcpuInstruction {
         }
     }
 
-    pub fn run_instruction(&self, operand_a:Word, operand_b:Word) -> Option<Word> {
+    pub fn run_instruction(&self, operand_a: Word, operand_b: Word) -> InstructionResult {
         match self {
-            DcpuInstruction::Undefined =>  None,
-            DcpuInstruction::Set => Some(operand_a),
-            DcpuInstruction::Add => Some(operand_a.wrapping_add(*operand_b).into()),
-            DcpuInstruction::Sub => Some(operand_a.wrapping_sub(*operand_b).into()),
-            DcpuInstruction::Mul => Some(operand_a.wrapping_mul(*operand_b).into()),
-            DcpuInstruction::Mli => {
-                let signed_a = operand_a.cast_signed();
-                let signed_b = operand_b.cast_signed();
-                Some(signed_a.wrapping_mul(signed_b).into())
-            },
-            DcpuInstruction::Div => Some(operand_a.wrapping_div(*operand_b).into()),
-            DcpuInstruction::Dvi => {
-                todo!()
+            DcpuInstruction::Undefined => InstructionResult::None,
+            DcpuInstruction::Set => InstructionResult::Value { val: operand_a },
+            DcpuInstruction::Add => {
+                let result = operand_a.wrapping_add(*operand_b);
+                InstructionResult::ValueCarry {
+                    val: Word(result),
+                    ex: if result < *operand_a {
+                        Word(0x0001)
+                    } else {
+                        Word(0x0000)
+                    },
+                }
             }
-            DcpuInstruction::Mod => todo!(),
-            DcpuInstruction::Mdi => todo!(),
+            DcpuInstruction::Sub => {
+                let result = operand_a.wrapping_sub(*operand_b);
+                InstructionResult::ValueCarry {
+                    val: Word(result),
+                    ex: if operand_b > operand_a {
+                        Word(0xffff)
+                    } else {
+                        Word(0x0000)
+                    },
+                }
+            }
+            DcpuInstruction::Mul => {
+                let big_a = *operand_a as u32;
+                let big_b = *operand_b as u32;
+                let big_result = big_a * big_b;
+                let result = (big_result & 0xffff) as u16;
+                let carry = ((big_result >> 16) & 0xffff) as u16;
+                InstructionResult::ValueCarry {
+                    val: Word(result),
+                    ex: Word(carry),
+                }
+            }
+            DcpuInstruction::Mli => {
+                let signed_a = operand_a.cast_signed() as i32;
+                let signed_b = operand_b.cast_signed() as i32;
+                let big_result = (signed_a * signed_b).cast_unsigned();
+                let result = (big_result & 0xffff) as u16;
+                let carry = ((big_result >> 16) & 0xffff) as u16;
+                InstructionResult::ValueCarry {
+                    val: Word(result),
+                    ex: Word(carry),
+                }
+            }
+            DcpuInstruction::Div => {
+                if *operand_a == 0 {
+                    return InstructionResult::ValueCarry {
+                        val: Word(0),
+                        ex: Word(0),
+                    };
+                }
+                let big_a = *operand_a as u32;
+                let big_b = *operand_b as u32;
+                let result = operand_b.div_floor(*operand_a);
+                let carry = ((big_b << 16).div_floor(big_a) & 0xffff) as u16;
+                InstructionResult::ValueCarry {
+                    val: Word(result),
+                    ex: Word(carry),
+                }
+            }
+            DcpuInstruction::Dvi => {
+                if *operand_a == 0 {
+                    return InstructionResult::ValueCarry {
+                        val: Word(0),
+                        ex: Word(0),
+                    };
+                }
+                let big_a = operand_a.cast_signed() as i32;
+                let big_b = operand_b.cast_signed() as i32;
+                let result = operand_b
+                    .cast_signed()
+                    .div_euclid(operand_a.cast_signed())
+                    .cast_unsigned();
+                let carry = ((big_b << 16).div_floor(big_a) & 0xffff) as u16;
+                InstructionResult::ValueCarry {
+                    val: Word(result),
+                    ex: Word(carry),
+                }
+            }
+            DcpuInstruction::Mod => {
+                if *operand_a == 0 {
+                    return InstructionResult::Value { val: Word(0) }
+                }
+                InstructionResult::Value { val: Word(*operand_b % *operand_a)}
+            },
+            DcpuInstruction::Mdi => {
+                if *operand_a == 0 {
+                    return InstructionResult::Value { val: Word(0) }
+                }
+                //Todo next time: If both operands have the same sign, return a positive result.
+                //If the operands have different signs, return a negative result.
+                InstructionResult::Value { val: Word(*operand_b % *operand_a)}
+            },
             DcpuInstruction::And => todo!(),
             DcpuInstruction::Bor => todo!(),
             DcpuInstruction::Xor => todo!(),
@@ -398,15 +500,15 @@ impl DcpuInstruction {
             DcpuInstruction::Sbx => todo!(),
             DcpuInstruction::Sti => todo!(),
             DcpuInstruction::Std => todo!(),
-            DcpuInstruction::Jsr => todo!(),
-            DcpuInstruction::Int => todo!(),
-            DcpuInstruction::Iag => todo!(),
-            DcpuInstruction::Ias => todo!(),
-            DcpuInstruction::Rfi => todo!(),
-            DcpuInstruction::Iaq => todo!(),
-            DcpuInstruction::Hwn => todo!(),
-            DcpuInstruction::Hwq => todo!(),
-            DcpuInstruction::Hwi => todo!(),
+            DcpuInstruction::Jsr
+            | DcpuInstruction::Int
+            | DcpuInstruction::Iag
+            | DcpuInstruction::Ias
+            | DcpuInstruction::Rfi
+            | DcpuInstruction::Iaq
+            | DcpuInstruction::Hwn
+            | DcpuInstruction::Hwq
+            | DcpuInstruction::Hwi => todo!(),
         }
     }
 }

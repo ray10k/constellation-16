@@ -95,7 +95,7 @@ impl VirtualCpu {
     pub fn processor_step(mut self, memory: Memory) -> (Self, Result<TickResult, Word>) {
         loop {
             let tick_step = self.hidden_state.instruction_state.clone();
-            println!("{:?}",tick_step);
+            println!("{:?}", tick_step);
             match tick_step {
                 TickStep::Ready => {
                     //Check if an interrupt is waiting and needs to be handled first!
@@ -183,8 +183,14 @@ impl VirtualCpu {
                     continue;
                 }
                 TickStep::SkipCondition => todo!(),
-                TickStep::Stall(0) => {self.hidden_state.instruction_state = Ready; return (self, Ok(TickResult::Instruction))},
-                TickStep::Stall(x) => {self.hidden_state.instruction_state = Stall(x - 1); break},
+                TickStep::Stall(0) => {
+                    self.hidden_state.instruction_state = Ready;
+                    return (self, Ok(TickResult::Instruction));
+                }
+                TickStep::Stall(x) => {
+                    self.hidden_state.instruction_state = Stall(x - 1);
+                    break;
+                }
             }
         }
 
@@ -442,7 +448,7 @@ mod tests {
 
     #[test]
     fn test_basic_execute() {
-        let mut memory:Box<[Word]> = Box::from([Word(0); 0xffff]);
+        let mut memory: Box<[Word]> = Box::from([Word(0); 0xffff]);
         memory[0] = (0x08 | (0x01 << 5)).into(); //MOD B, A
         let memory = Rc::new(RefCell::new(memory));
         let mut processor = VirtualCpu::default();
