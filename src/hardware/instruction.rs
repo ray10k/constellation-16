@@ -478,15 +478,50 @@ impl DcpuInstruction {
                 if *operand_a == 0 {
                     return InstructionResult::Value { val: Word(0) }
                 }
-                //Todo next time: If both operands have the same sign, return a positive result.
-                //If the operands have different signs, return a negative result.
-                InstructionResult::Value { val: Word(*operand_b % *operand_a)}
+                let signed_a = operand_a.cast_signed();
+                let signed_b = operand_b.cast_signed();
+
+                let result_neg = (signed_a > 0 && signed_b < 0) || (signed_a < 0 && signed_b > 0);
+                let result = (signed_a.abs() % signed_b.abs()) * (if result_neg {-1} else {1});
+                InstructionResult::Value { val: Word(result.cast_unsigned())}
             },
-            DcpuInstruction::And => todo!(),
-            DcpuInstruction::Bor => todo!(),
-            DcpuInstruction::Xor => todo!(),
-            DcpuInstruction::Shr => todo!(),
-            DcpuInstruction::Asr => todo!(),
+            DcpuInstruction::And => {
+                InstructionResult::Value { val: Word(*operand_a & *operand_b) }
+            },
+            DcpuInstruction::Bor => {
+                InstructionResult::Value { val: Word(*operand_a | *operand_b) }
+            },
+            DcpuInstruction::Xor => {
+                InstructionResult::Value { val: Word(*operand_a ^ *operand_b) }
+            },
+            DcpuInstruction::Shr => {
+                //Shift `b` to the right (may result in 0)
+                let result = operand_b.unbounded_shr(*operand_a as u32);
+                //Determine which bits were shifted out of the value.
+
+                //todo: double-check this mess.
+                let carry = (
+                    (
+                        (
+                            (operand_b.cast_signed() as i32).unbounded_shl(16)
+                        ).unbounded_shr(operand_a.cast_signed() as u32)
+                    ) & 0xffff) as u16;
+                InstructionResult::ValueCarry { val: result.into(), ex: carry.into() }
+            },
+            DcpuInstruction::Asr => {
+                //Arithmetic shift is a little different, since we have to preserve the MSB value.
+                //IE, if the value 0x8000 gets right-shifted 3 spots, we should get 0xf000.
+                let result = operand_b.cast_signed().unbounded_shr(operand_a.cast_signed() as u32);
+
+                //todo: double-check this mess as well.
+                let carry = (
+                    (
+                        (
+                            (operand_b.cast_signed() as i32).unbounded_shl(16)
+                        ).cast_unsigned().unbounded_shr(*operand_a as u32) 
+                    ) & 0xffff) as u16;
+                InstructionResult::ValueCarry { val: result.into(), ex: carry.into() }
+            }
             DcpuInstruction::Shl => todo!(),
             DcpuInstruction::Ifb => todo!(),
             DcpuInstruction::Ifc => todo!(),
