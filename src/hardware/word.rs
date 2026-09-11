@@ -37,6 +37,14 @@ impl BitAnd<u16> for Word {
     }
 }
 
+impl BitAnd<Word> for Word {
+    type Output = Self;
+
+    fn bitand(self, rhs: Word) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
 impl AddAssign<u16> for Word {
     fn add_assign(&mut self, rhs: u16) {
         self.0 = self.0.wrapping_add(rhs);

@@ -385,15 +385,16 @@ impl DcpuInstruction {
         }
     }
 
-    pub fn run_instruction(&self, operand_a: Word, operand_b: Word) -> InstructionResult {
+    pub fn run_instruction(&self, operand_a: Word, operand_b: Word, ex_reg: Word) -> InstructionResult {
         match self {
             DcpuInstruction::Undefined => InstructionResult::None,
             DcpuInstruction::Set => InstructionResult::Value { val: operand_a },
             DcpuInstruction::Add => {
-                let result = operand_a.wrapping_add(*operand_b);
+                let wide_result = *operand_b as u32 + *operand_a as u32;
+                let result = (wide_result & 0xffff) as u16;
                 InstructionResult::ValueCarry {
                     val: Word(result),
-                    ex: if result < *operand_a {
+                    ex: if wide_result > 0xffff {
                         Word(0x0001)
                     } else {
                         Word(0x0000)
@@ -401,10 +402,11 @@ impl DcpuInstruction {
                 }
             }
             DcpuInstruction::Sub => {
-                let result = operand_a.wrapping_sub(*operand_b);
+                let wide_result = (*operand_b as u32).wrapping_sub(*operand_a as u32);
+                let result = (wide_result & 0xffff) as u16;
                 InstructionResult::ValueCarry {
                     val: Word(result),
-                    ex: if operand_b > operand_a {
+                    ex: if wide_result > 0xffff {
                         Word(0xffff)
                     } else {
                         Word(0x0000)
@@ -495,46 +497,105 @@ impl DcpuInstruction {
                 InstructionResult::Value { val: Word(*operand_a ^ *operand_b) }
             },
             DcpuInstruction::Shr => {
-                //Shift `b` to the right (may result in 0)
-                let result = operand_b.unbounded_shr(*operand_a as u32);
-                //Determine which bits were shifted out of the value.
+                //After a shift-right, `result` should contain the bits that are still "in the window"
+                //while `carry` contains the bits that were shifted out. So!
+                //Start by turning `b`, the value that will get shifted-to-the-right, into a 32-bit value
+                //then move it left 16 positions.
 
-                //todo: double-check this mess.
-                let carry = (
-                    (
-                        (
-                            (operand_b.cast_signed() as i32).unbounded_shl(16)
-                        ).unbounded_shr(operand_a.cast_signed() as u32)
-                    ) & 0xffff) as u16;
+                let big_b = (*operand_b as u32) << 16;
+                //Perform the actual shift now. The upper 16 bits of `big_b` will be the result, and the
+                //lower 16 bits of the same will be the carry.
+                let big_b = big_b.unbounded_shr(*operand_a as u32);
+
+                let result = ((big_b >> 16) & 0xffff) as u16;
+                let carry = (big_b & 0xffff) as u16;
+
                 InstructionResult::ValueCarry { val: result.into(), ex: carry.into() }
             },
             DcpuInstruction::Asr => {
-                //Arithmetic shift is a little different, since we have to preserve the MSB value.
-                //IE, if the value 0x8000 gets right-shifted 3 spots, we should get 0xf000.
-                let result = operand_b.cast_signed().unbounded_shr(operand_a.cast_signed() as u32);
+                let shift_result = ((operand_b.cast_signed()) >> (*operand_a as u32)).cast_unsigned();
+                let big_b = ((*operand_b as u32) << 16) >> (*operand_a as u32);
+                let carry = (big_b & 0xffff) as u16;
 
-                //todo: double-check this mess as well.
-                let carry = (
-                    (
-                        (
-                            (operand_b.cast_signed() as i32).unbounded_shl(16)
-                        ).cast_unsigned().unbounded_shr(*operand_a as u32) 
-                    ) & 0xffff) as u16;
-                InstructionResult::ValueCarry { val: result.into(), ex: carry.into() }
+                InstructionResult::ValueCarry { val: shift_result.into(), ex: carry.into() }
             }
-            DcpuInstruction::Shl => todo!(),
-            DcpuInstruction::Ifb => todo!(),
-            DcpuInstruction::Ifc => todo!(),
-            DcpuInstruction::Ife => todo!(),
-            DcpuInstruction::Ifn => todo!(),
-            DcpuInstruction::Ifg => todo!(),
-            DcpuInstruction::Ifa => todo!(),
-            DcpuInstruction::Ifl => todo!(),
-            DcpuInstruction::Ifu => todo!(),
-            DcpuInstruction::Adx => todo!(),
-            DcpuInstruction::Sbx => todo!(),
-            DcpuInstruction::Sti => todo!(),
-            DcpuInstruction::Std => todo!(),
+            DcpuInstruction::Shl => {
+                let shift_result = (*operand_b as u32).unbounded_shl(*operand_a as u32);
+                let result = ((shift_result >> 16) & 0xffff) as u16;
+                let carry = (shift_result & 0xffff) as u16;
+
+                InstructionResult::ValueCarry { val: result.into(), ex: carry.into() }
+            },
+            DcpuInstruction::Ifb => {
+                if (operand_a & operand_b) != 0.into() {
+                    InstructionResult::None
+                } else {
+                    InstructionResult::Skip
+                }
+            },
+            DcpuInstruction::Ifc => {
+                if (operand_a & operand_b) == o.into() {
+                    InstructionResult::None
+                } else {
+                    InstructionResult::Skip
+                }
+            },
+            DcpuInstruction::Ife => {
+                if operand_a == operand_b {
+                    InstructionResult::None
+                } else {
+                    InstructionResult::Skip
+                }
+            },
+            DcpuInstruction::Ifn => {
+                if operand_a != operand_b {
+                    InstructionResult::None
+                } else {
+                    InstructionResult::Skip
+                }
+            },
+            DcpuInstruction::Ifg => {
+                if operand_b > operand_a {
+                    InstructionResult::None
+                } else {
+                    InstructionResult::Skip
+                }
+            },
+            DcpuInstruction::Ifa => {
+                if operand_b.cast_signed() > operand_a.cast_signed() {
+                    InstructionResult::None
+                } else {
+                    InstructionResult::Skip
+                }
+            },
+            DcpuInstruction::Ifl => {
+                if operand_b < operand_a {
+                    InstructionResult::None
+                } else {
+                    InstructionResult::Skip
+                }
+            },
+            DcpuInstruction::Ifu => {
+                if operand_b.cast_signed() < operand_a.cast_signed() {
+                    InstructionResult::None
+                } else {
+                    InstructionResult::Skip
+                }
+            },
+            DcpuInstruction::Adx => {
+                let wide_result = *operand_a as u32 + *operand_b as u32 + *ex_reg as u32;
+                let overflow = if wide_result > 0xffff { 0x0001u16 } else { 0u16 };
+                let result = (wide_result & 0xffff) as u16;
+                InstructionResult::ValueCarry { val: result.into(), ex: overflow.into() }
+            },
+            DcpuInstruction::Sbx => {
+                let wide_result = (*operand_b as u32).wrapping_sub(*operand_a as u32 + *ex_reg as u32);
+                let underflow = if wide_result > 0xffff { 0xffffu16 } else { 0u16 };
+                let result = (wide_result & 0xffff) as u16;
+                InstructionResult::ValueCarry { val: result.into(), ex: underflow.into() }
+            },
+            DcpuInstruction::Sti => InstructionResult::ValueIncrement { val: operand_a },
+            DcpuInstruction::Std => InstructionResult::ValueDecrement { val: operand_a },
             DcpuInstruction::Jsr
             | DcpuInstruction::Int
             | DcpuInstruction::Iag
@@ -543,7 +604,7 @@ impl DcpuInstruction {
             | DcpuInstruction::Iaq
             | DcpuInstruction::Hwn
             | DcpuInstruction::Hwq
-            | DcpuInstruction::Hwi => todo!(),
+            | DcpuInstruction::Hwi => InstructionResult::Special,
         }
     }
 }
