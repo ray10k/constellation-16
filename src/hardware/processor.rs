@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use crate::hardware::processor::TickStep::{FetchB, Ready, Stall};
 
-use super::instruction::{AOperand, BOperand, DecodedInstruction};
+use super::instruction::{AOperand, BOperand, DecodedInstruction, InstructionResult};
 use super::word::Word;
 
 type Memory = Rc<RefCell<Box<[Word]>>>;
@@ -68,7 +68,7 @@ enum TickStep {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-enum TickResult {
+pub enum TickResult {
     /// An instruction has been partially executed. Next tick will continue execution of this instruction.
     PartialInstr,
     /// An instruction finished. Next tick may either start the next instruction, or handle a pending interrupt.
@@ -185,6 +185,35 @@ impl VirtualCpu {
                 TickStep::SkipCondition => todo!(),
                 TickStep::Stall(0) => {
                     self.hidden_state.instruction_state = Ready;
+
+                    let instruction = self
+                        .hidden_state
+                        .current_instruction
+                        .as_ref()
+                        .expect("Instruction was not correctly parsed.")
+                        .clone();
+                    match instruction.opcode.run_instruction(
+                        instruction.fetched_a,
+                        instruction.fetched_b,
+                        self.hidden_state.reg_excess,
+                    ) {
+                        InstructionResult::None => {/*Nothing needs to be done here. Just continue to the next instruction.*/}
+                        InstructionResult::Value { val } => {
+
+                        },
+                        InstructionResult::ValueCarry { val, ex } => {
+                            todo!()
+                        }
+                        InstructionResult::ValueIncrement { val } => {
+                            todo!()
+                        }
+                        InstructionResult::ValueDecrement { val } => {
+                            todo!()
+                        }
+                        InstructionResult::Skip => todo!(),
+                        InstructionResult::Special => todo!(),
+                    }
+
                     return (self, Ok(TickResult::Instruction));
                 }
                 TickStep::Stall(x) => {
@@ -439,6 +468,172 @@ impl VirtualCpu {
             }
         };
         retval
+    }
+
+    fn store_value(&mut self, operand: &BOperand, memory: Memory, a_next_word:bool, value:Word) {
+        match operand {
+            BOperand::RegA => self.registers.reg_a = value,
+            BOperand::RegB => self.registers.reg_b = value,
+            BOperand::RegC => self.registers.reg_c = value,
+            BOperand::RegX => self.registers.reg_x = value,
+            BOperand::RegY => self.registers.reg_y = value,
+            BOperand::RegZ => self.registers.reg_z = value,
+            BOperand::RegI => self.registers.reg_i = value,
+            BOperand::RegJ => self.registers.reg_j = value,
+            BOperand::DerefA => {
+                let dest_addr = self.registers.reg_a.to_usize();
+                memory.borrow_mut()[dest_addr] = value;
+            },
+            BOperand::DerefB => {
+                let dest_addr = self.registers.reg_b.to_usize();
+                memory.borrow_mut()[dest_addr] = value;
+            },
+            BOperand::DerefC => {
+                let dest_addr = self.registers.reg_c.to_usize();
+                memory.borrow_mut()[dest_addr] = value;
+            },
+            BOperand::DerefX => {
+                let dest_addr = self.registers.reg_x.to_usize();
+                memory.borrow_mut()[dest_addr] = value;
+            },
+            BOperand::DerefY => {
+                let dest_addr = self.registers.reg_y.to_usize();
+                memory.borrow_mut()[dest_addr] = value;
+            },
+            BOperand::DerefZ => {
+                let dest_addr = self.registers.reg_z.to_usize();
+                memory.borrow_mut()[dest_addr] = value;
+            },
+            BOperand::DerefI => {
+                let dest_addr = self.registers.reg_i.to_usize();
+                memory.borrow_mut()[dest_addr] = value;
+            },
+            BOperand::DerefJ => {
+                let dest_addr = self.registers.reg_j.to_usize();
+                memory.borrow_mut()[dest_addr] = value;
+            },
+            BOperand::OffsetA => {
+                let mut dest_addr = self.registers.reg_a.to_usize();
+                let mut offset_addr = self.hidden_state.program_counter.to_usize() + 1;
+                if a_next_word {offset_addr += 1};
+                {
+                    //Separate block, to ensure the .borrow() gets dropped and the next use of memory doesn't panic.
+                    dest_addr += memory.borrow()[offset_addr & 0xffff].to_usize();
+                }
+                {
+                    memory.borrow_mut()[dest_addr] = value;
+                }
+            },
+            BOperand::OffsetB => {
+                let mut dest_addr = self.registers.reg_b.to_usize();
+                let mut offset_addr = self.hidden_state.program_counter.to_usize() + 1;
+                if a_next_word {offset_addr += 1};
+                {
+                    //Separate block, to ensure the .borrow() gets dropped and the next use of memory doesn't panic.
+                    dest_addr += memory.borrow()[offset_addr & 0xffff].to_usize();
+                }
+                {
+                    memory.borrow_mut()[dest_addr] = value;
+                }
+            },
+            BOperand::OffsetC => {
+                let mut dest_addr = self.registers.reg_c.to_usize();
+                let mut offset_addr = self.hidden_state.program_counter.to_usize() + 1;
+                if a_next_word {offset_addr += 1};
+                {
+                    //Separate block, to ensure the .borrow() gets dropped and the next use of memory doesn't panic.
+                    dest_addr += memory.borrow()[offset_addr & 0xffff].to_usize();
+                }
+                {
+                    memory.borrow_mut()[dest_addr] = value;
+                }
+            },
+            BOperand::OffsetX => {
+                let mut dest_addr = self.registers.reg_x.to_usize();
+                let mut offset_addr = self.hidden_state.program_counter.to_usize() + 1;
+                if a_next_word {offset_addr += 1};
+                {
+                    //Separate block, to ensure the .borrow() gets dropped and the next use of memory doesn't panic.
+                    dest_addr += memory.borrow()[offset_addr & 0xffff].to_usize();
+                }
+                {
+                    memory.borrow_mut()[dest_addr] = value;
+                }
+            },
+            BOperand::OffsetY => {
+                let mut dest_addr = self.registers.reg_y.to_usize();
+                let mut offset_addr = self.hidden_state.program_counter.to_usize() + 1;
+                if a_next_word {offset_addr += 1};
+                {
+                    //Separate block, to ensure the .borrow() gets dropped and the next use of memory doesn't panic.
+                    dest_addr += memory.borrow()[offset_addr & 0xffff].to_usize();
+                }
+                {
+                    memory.borrow_mut()[dest_addr] = value;
+                }
+            },
+            BOperand::OffsetZ => {
+                let mut dest_addr = self.registers.reg_z.to_usize();
+                let mut offset_addr = self.hidden_state.program_counter.to_usize() + 1;
+                if a_next_word {offset_addr += 1};
+                {
+                    //Separate block, to ensure the .borrow() gets dropped and the next use of memory doesn't panic.
+                    dest_addr += memory.borrow()[offset_addr & 0xffff].to_usize();
+                }
+                {
+                    memory.borrow_mut()[dest_addr] = value;
+                }
+            },
+            BOperand::OffsetI => {
+                let mut dest_addr = self.registers.reg_i.to_usize();
+                let mut offset_addr = self.hidden_state.program_counter.to_usize() + 1;
+                if a_next_word {offset_addr += 1};
+                {
+                    //Separate block, to ensure the .borrow() gets dropped and the next use of memory doesn't panic.
+                    dest_addr += memory.borrow()[offset_addr & 0xffff].to_usize();
+                }
+                {
+                    memory.borrow_mut()[dest_addr] = value;
+                }
+            },
+            BOperand::OffsetJ => {
+                let mut dest_addr = self.registers.reg_j.to_usize();
+                let mut offset_addr = self.hidden_state.program_counter.to_usize() + 1;
+                if a_next_word {offset_addr += 1};
+                {
+                    //Separate block, to ensure the .borrow() gets dropped and the next use of memory doesn't panic.
+                    dest_addr += memory.borrow()[offset_addr & 0xffff].to_usize();
+                }
+                {
+                    memory.borrow_mut()[dest_addr] = value;
+                }
+            },
+            BOperand::Push => {
+                let dest_addr = self.hidden_state.stack_pointer - 1;
+                self.hidden_state.stack_pointer = dest_addr;
+                memory.borrow_mut()[dest_addr.to_usize()] = value;
+            },
+            BOperand::Peek => {
+                let dest_addr = self.hidden_state.stack_pointer.to_usize();
+                memory.borrow_mut()[dest_addr] = value;
+            },
+            BOperand::Pick => {
+                let mut dest_addr = self.hidden_state.stack_pointer.to_usize();
+                let mut offset_addr = self.hidden_state.program_counter.to_usize() + 1;
+                if a_next_word {offset_addr += 1};
+                {
+                    dest_addr += memory.borrow()[offset_addr & 0xffff].to_usize();
+                }
+                {
+                    memory.borrow_mut()[dest_addr] = value;
+                }
+            },
+            BOperand::StackPointer => todo!(),
+            BOperand::ProgramCounter => todo!(),
+            BOperand::Excess => todo!(),
+            BOperand::DerefImmediate => todo!(),
+            BOperand::ValueImmediate => todo!(),
+        }
     }
 }
 

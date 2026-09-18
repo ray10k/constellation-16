@@ -1,4 +1,4 @@
-use std::ops::{AddAssign, BitAnd, Deref, DerefMut, SubAssign};
+use std::ops::{AddAssign, BitAnd, Deref, DerefMut, SubAssign, Sub, Add};
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
 pub struct Word(pub u16);
@@ -54,6 +54,21 @@ impl AddAssign<u16> for Word {
 impl SubAssign<u16> for Word {
     fn sub_assign(&mut self, rhs: u16) {
         self.0 = self.0.wrapping_sub(rhs);
+    }
+}
+
+impl Sub<u16> for Word {
+    type Output = Self;
+
+    fn sub(self, rhs: u16) -> Self::Output {
+        Self(self.0.wrapping_sub(rhs))
+    }
+}
+impl Add<u16> for Word {
+    type Output = Self;
+
+    fn add(self, rhs: u16) -> Self::Output {
+        Self(self.0.wrapping_add(rhs))
     }
 }
 
