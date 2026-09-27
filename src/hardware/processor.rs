@@ -148,7 +148,7 @@ impl VirtualCpu {
                     //next: either the current operand has a Cycle-cost (C value in the table) of 0,
                     //or of 1. So, either break out of the loop and pick up next tick, or just continue
                     //to handle the next step.
-                    if operand.has_delay() {
+                    if operand.uses_next_word() {
                         break;
                     }
                     continue;
@@ -182,7 +182,23 @@ impl VirtualCpu {
                     }
                     continue;
                 }
-                TickStep::SkipCondition => todo!(),
+                TickStep::SkipCondition => {
+                    //parse the current instruction, since we need to check if it is a comparison
+                    // or not.
+                    let instruction: Option<DecodedInstruction> = memory.borrow_mut()
+                        [self.hidden_state.program_counter.to_usize()]
+                    .try_into()
+                    .ok();
+                    if let None = instruction {
+                        let err_location = self.hidden_state.program_counter.to_usize();
+                        return (self, Err(memory.borrow()[err_location]));
+                    }
+                    self.hidden_state.current_instruction = instruction.clone();
+                    self.hidden_state.program_counter += instruction.as_ref().unwrap().word_size();
+                    if !instruction.unwrap().opcode.is_branching() {
+                        self.hidden_state.instruction_state = TickStep::Ready;
+                    }
+                },
                 TickStep::Stall(0) => {
                     self.hidden_state.instruction_state = Ready;
 
@@ -197,22 +213,54 @@ impl VirtualCpu {
                         instruction.fetched_b,
                         self.hidden_state.reg_excess,
                     ) {
-                        InstructionResult::None => {/*Nothing needs to be done here. Just continue to the next instruction.*/}
+                        InstructionResult::None => { /*Nothing needs to be done here. Just continue to the next instruction.*/
+                        }
                         InstructionResult::Value { val } => {
-
-                        },
+                            self.store_value(
+                                &instruction.operand_b.expect("Bad b-operand"),
+                                Rc::clone(&memory),
+                                instruction.operand_a.uses_next_word(),
+                                val,
+                            );
+                        }
                         InstructionResult::ValueCarry { val, ex } => {
-                            todo!()
+                            self.store_value(
+                                &instruction.operand_b.expect("Bad b-operand"),
+                                Rc::clone(&memory),
+                                instruction.operand_a.uses_next_word(),
+                                val,
+                            );
+                            self.hidden_state.reg_excess = ex;
                         }
                         InstructionResult::ValueIncrement { val } => {
-                            todo!()
+                            self.store_value(
+                                &instruction.operand_b.expect("Bad b-operand"),
+                                Rc::clone(&memory),
+                                instruction.operand_a.uses_next_word(),
+                                val,
+                            );
+                            self.registers.reg_i += 1;
+                            self.registers.reg_j += 1;
                         }
                         InstructionResult::ValueDecrement { val } => {
-                            todo!()
+                            self.store_value(
+                                &instruction.operand_b.expect("Bad b-operand"),
+                                Rc::clone(&memory),
+                                instruction.operand_a.uses_next_word(),
+                                val,
+                            );
+                            self.registers.reg_i -= 1;
+                            self.registers.reg_j -= 1;
                         }
-                        InstructionResult::Skip => todo!(),
-                        InstructionResult::Special => todo!(),
+                        InstructionResult::Skip => {
+                            //No value to save, *but*. Will need to start skipping over stuff.
+                            self.hidden_state.instruction_state = TickStep::SkipCondition;
+                            self.hidden_state.program_counter += instruction.word_size();
+                            return (self, Ok(TickResult::Instruction));
+                        },
+                        InstructionResult::Special => todo!("Implement the Special opcode page."),
                     }
+
 
                     return (self, Ok(TickResult::Instruction));
                 }
@@ -470,7 +518,7 @@ impl VirtualCpu {
         retval
     }
 
-    fn store_value(&mut self, operand: &BOperand, memory: Memory, a_next_word:bool, value:Word) {
+    fn store_value(&mut self, operand: &BOperand, memory: Memory, a_next_word: bool, value: Word) {
         match operand {
             BOperand::RegA => self.registers.reg_a = value,
             BOperand::RegB => self.registers.reg_b = value,
@@ -483,39 +531,41 @@ impl VirtualCpu {
             BOperand::DerefA => {
                 let dest_addr = self.registers.reg_a.to_usize();
                 memory.borrow_mut()[dest_addr] = value;
-            },
+            }
             BOperand::DerefB => {
                 let dest_addr = self.registers.reg_b.to_usize();
                 memory.borrow_mut()[dest_addr] = value;
-            },
+            }
             BOperand::DerefC => {
                 let dest_addr = self.registers.reg_c.to_usize();
                 memory.borrow_mut()[dest_addr] = value;
-            },
+            }
             BOperand::DerefX => {
                 let dest_addr = self.registers.reg_x.to_usize();
                 memory.borrow_mut()[dest_addr] = value;
-            },
+            }
             BOperand::DerefY => {
                 let dest_addr = self.registers.reg_y.to_usize();
                 memory.borrow_mut()[dest_addr] = value;
-            },
+            }
             BOperand::DerefZ => {
                 let dest_addr = self.registers.reg_z.to_usize();
                 memory.borrow_mut()[dest_addr] = value;
-            },
+            }
             BOperand::DerefI => {
                 let dest_addr = self.registers.reg_i.to_usize();
                 memory.borrow_mut()[dest_addr] = value;
-            },
+            }
             BOperand::DerefJ => {
                 let dest_addr = self.registers.reg_j.to_usize();
                 memory.borrow_mut()[dest_addr] = value;
-            },
+            }
             BOperand::OffsetA => {
                 let mut dest_addr = self.registers.reg_a.to_usize();
                 let mut offset_addr = self.hidden_state.program_counter.to_usize() + 1;
-                if a_next_word {offset_addr += 1};
+                if a_next_word {
+                    offset_addr += 1
+                };
                 {
                     //Separate block, to ensure the .borrow() gets dropped and the next use of memory doesn't panic.
                     dest_addr += memory.borrow()[offset_addr & 0xffff].to_usize();
@@ -523,11 +573,13 @@ impl VirtualCpu {
                 {
                     memory.borrow_mut()[dest_addr] = value;
                 }
-            },
+            }
             BOperand::OffsetB => {
                 let mut dest_addr = self.registers.reg_b.to_usize();
                 let mut offset_addr = self.hidden_state.program_counter.to_usize() + 1;
-                if a_next_word {offset_addr += 1};
+                if a_next_word {
+                    offset_addr += 1
+                };
                 {
                     //Separate block, to ensure the .borrow() gets dropped and the next use of memory doesn't panic.
                     dest_addr += memory.borrow()[offset_addr & 0xffff].to_usize();
@@ -535,11 +587,13 @@ impl VirtualCpu {
                 {
                     memory.borrow_mut()[dest_addr] = value;
                 }
-            },
+            }
             BOperand::OffsetC => {
                 let mut dest_addr = self.registers.reg_c.to_usize();
                 let mut offset_addr = self.hidden_state.program_counter.to_usize() + 1;
-                if a_next_word {offset_addr += 1};
+                if a_next_word {
+                    offset_addr += 1
+                };
                 {
                     //Separate block, to ensure the .borrow() gets dropped and the next use of memory doesn't panic.
                     dest_addr += memory.borrow()[offset_addr & 0xffff].to_usize();
@@ -547,11 +601,13 @@ impl VirtualCpu {
                 {
                     memory.borrow_mut()[dest_addr] = value;
                 }
-            },
+            }
             BOperand::OffsetX => {
                 let mut dest_addr = self.registers.reg_x.to_usize();
                 let mut offset_addr = self.hidden_state.program_counter.to_usize() + 1;
-                if a_next_word {offset_addr += 1};
+                if a_next_word {
+                    offset_addr += 1
+                };
                 {
                     //Separate block, to ensure the .borrow() gets dropped and the next use of memory doesn't panic.
                     dest_addr += memory.borrow()[offset_addr & 0xffff].to_usize();
@@ -559,11 +615,13 @@ impl VirtualCpu {
                 {
                     memory.borrow_mut()[dest_addr] = value;
                 }
-            },
+            }
             BOperand::OffsetY => {
                 let mut dest_addr = self.registers.reg_y.to_usize();
                 let mut offset_addr = self.hidden_state.program_counter.to_usize() + 1;
-                if a_next_word {offset_addr += 1};
+                if a_next_word {
+                    offset_addr += 1
+                };
                 {
                     //Separate block, to ensure the .borrow() gets dropped and the next use of memory doesn't panic.
                     dest_addr += memory.borrow()[offset_addr & 0xffff].to_usize();
@@ -571,11 +629,13 @@ impl VirtualCpu {
                 {
                     memory.borrow_mut()[dest_addr] = value;
                 }
-            },
+            }
             BOperand::OffsetZ => {
                 let mut dest_addr = self.registers.reg_z.to_usize();
                 let mut offset_addr = self.hidden_state.program_counter.to_usize() + 1;
-                if a_next_word {offset_addr += 1};
+                if a_next_word {
+                    offset_addr += 1
+                };
                 {
                     //Separate block, to ensure the .borrow() gets dropped and the next use of memory doesn't panic.
                     dest_addr += memory.borrow()[offset_addr & 0xffff].to_usize();
@@ -583,11 +643,13 @@ impl VirtualCpu {
                 {
                     memory.borrow_mut()[dest_addr] = value;
                 }
-            },
+            }
             BOperand::OffsetI => {
                 let mut dest_addr = self.registers.reg_i.to_usize();
                 let mut offset_addr = self.hidden_state.program_counter.to_usize() + 1;
-                if a_next_word {offset_addr += 1};
+                if a_next_word {
+                    offset_addr += 1
+                };
                 {
                     //Separate block, to ensure the .borrow() gets dropped and the next use of memory doesn't panic.
                     dest_addr += memory.borrow()[offset_addr & 0xffff].to_usize();
@@ -595,11 +657,13 @@ impl VirtualCpu {
                 {
                     memory.borrow_mut()[dest_addr] = value;
                 }
-            },
+            }
             BOperand::OffsetJ => {
                 let mut dest_addr = self.registers.reg_j.to_usize();
                 let mut offset_addr = self.hidden_state.program_counter.to_usize() + 1;
-                if a_next_word {offset_addr += 1};
+                if a_next_word {
+                    offset_addr += 1
+                };
                 {
                     //Separate block, to ensure the .borrow() gets dropped and the next use of memory doesn't panic.
                     dest_addr += memory.borrow()[offset_addr & 0xffff].to_usize();
@@ -607,27 +671,29 @@ impl VirtualCpu {
                 {
                     memory.borrow_mut()[dest_addr] = value;
                 }
-            },
+            }
             BOperand::Push => {
                 let dest_addr = self.hidden_state.stack_pointer - 1;
                 self.hidden_state.stack_pointer = dest_addr;
                 memory.borrow_mut()[dest_addr.to_usize()] = value;
-            },
+            }
             BOperand::Peek => {
                 let dest_addr = self.hidden_state.stack_pointer.to_usize();
                 memory.borrow_mut()[dest_addr] = value;
-            },
+            }
             BOperand::Pick => {
                 let mut dest_addr = self.hidden_state.stack_pointer.to_usize();
                 let mut offset_addr = self.hidden_state.program_counter.to_usize() + 1;
-                if a_next_word {offset_addr += 1};
+                if a_next_word {
+                    offset_addr += 1
+                };
                 {
                     dest_addr += memory.borrow()[offset_addr & 0xffff].to_usize();
                 }
                 {
                     memory.borrow_mut()[dest_addr] = value;
                 }
-            },
+            }
             BOperand::StackPointer => todo!(),
             BOperand::ProgramCounter => todo!(),
             BOperand::Excess => todo!(),

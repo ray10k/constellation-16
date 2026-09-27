@@ -1,6 +1,5 @@
 use num::Integer;
 use num_derive::FromPrimitive;
-use num_traits::Euclid;
 
 use super::word::Word;
 
@@ -68,7 +67,7 @@ impl DecodedInstruction {
     /// Can be 1, 2 or 3 depending on operands.
     pub fn word_size(&self) -> u16 {
         let mut retval = 1;
-        if self.operand_a.has_delay() {
+        if self.operand_a.uses_next_word() {
             retval += 1;
         }
         if let Some(op_b) = &self.operand_b
@@ -184,7 +183,7 @@ impl TryInto<AOperand> for u16 {
 }
 
 impl AOperand {
-    pub fn has_delay(&self) -> bool {
+    pub fn uses_next_word(&self) -> bool {
         match self {
             AOperand::OffsetA
             | AOperand::OffsetB
@@ -381,6 +380,20 @@ impl DcpuInstruction {
             | Self::Hwn
             | Self::Hwq
             | Self::Hwi => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_branching(&self) -> bool {
+        match self {
+            Self::Ifa 
+            | Self::Ifb
+            | Self::Ifc
+            | Self::Ife
+            | Self::Ifg
+            | Self::Ifl
+            | Self::Ifn
+            | Self::Ifu => true,
             _ => false,
         }
     }

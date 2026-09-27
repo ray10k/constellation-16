@@ -1,4 +1,4 @@
-use std::ops::{AddAssign, BitAnd, Deref, DerefMut, SubAssign, Sub, Add};
+use std::ops::{Add, AddAssign, BitAnd, Deref, DerefMut, Sub, SubAssign};
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
 pub struct Word(pub u16);
