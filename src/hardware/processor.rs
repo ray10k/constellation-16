@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
-use crate::hardware::processor::TickStep::{FetchB, Ready, Stall};
+use crate::hardware::processor::TickStep::{FetchB, InterruptStall, Ready, Stall};
 
 use super::instruction::{AOperand, BOperand, DecodedInstruction, InstructionResult};
 use super::word::Word;
@@ -65,14 +65,20 @@ enum TickStep {
     SkipCondition,
     /// Some other condition has resulted in a delay. Goes down by 1 until end of instruction.
     Stall(u16),
+    /// An interrupt has resulted in a delay. Goes down by 1 until the next instruction can be fetched.
+    InterruptStall(u16),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum TickResult {
-    /// An instruction has been partially executed. Next tick will continue execution of this instruction.
+    /// An instruction has been partially executed. Next tick will continue execution of this same instruction.
     PartialInstr,
     /// An instruction finished. Next tick may either start the next instruction, or handle a pending interrupt.
     Instruction,
+    /// An interrupt was taken from the queue, but IA was 0 and the interrupt 'did nothing'.
+    FakeInterrupt,
+    /// An interrupt was taken from the queue.
+    Interrupt,
     /// A `HWQ` instruction finished. Same as `Instruction` variant, but information about the given peripheral
     /// must be written to the registers.
     QueryHardware(Word),
@@ -102,7 +108,27 @@ impl VirtualCpu {
                     if !self.hidden_state.queue_incoming_interrupts
                         && !self.hidden_state.interrupt_queue.is_empty()
                     {
-                        todo!("Handle interrupts.");
+                        let oldest_interrupt = self.hidden_state.interrupt_queue.pop_front().unwrap();
+                        if self.hidden_state.interrupt_address == 0.into() {
+                            //Special case: *do* pop an item from the queue, but *don't* actually
+                            // handle it. Why? Spec said so. Still needs 4 cycles of stalling.
+                            self.hidden_state.instruction_state = TickStep::InterruptStall(4);
+                            return (self,Ok(TickResult::FakeInterrupt));
+                        }
+                        self.hidden_state.queue_incoming_interrupts = true;
+                        
+                        {
+                            let mut mem_ref = memory.borrow_mut();
+                            mem_ref[self.hidden_state.stack_pointer.to_usize()] = self.hidden_state.program_counter;
+                            mem_ref[self.hidden_state.stack_pointer.to_usize() + 1] = self.registers.reg_a;
+                        }    
+                        
+                        self.hidden_state.stack_pointer += 2;
+                        self.hidden_state.program_counter = self.hidden_state.interrupt_address;
+                        self.registers.reg_a = oldest_interrupt;
+
+                        self.hidden_state.instruction_state = TickStep::InterruptStall(4);
+                        return (self,Ok(TickResult::Interrupt));
                     }
                     //No waiting interrupts, ready to start executing an instruction. So, decode
                     //the next instruction that PC points at.
@@ -266,6 +292,14 @@ impl VirtualCpu {
                 }
                 TickStep::Stall(x) => {
                     self.hidden_state.instruction_state = Stall(x - 1);
+                    break;
+                }
+                TickStep::InterruptStall(0) => {
+                    self.hidden_state.instruction_state = Ready;
+                    break;
+                }
+                TickStep::InterruptStall(x) => {
+                    self.hidden_state.instruction_state = InterruptStall(x - 1);
                     break;
                 }
             }
