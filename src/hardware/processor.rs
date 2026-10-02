@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
+use crate::hardware::instruction::DcpuInstruction;
 use crate::hardware::processor::TickStep::{FetchB, InterruptStall, Ready, Stall};
 
 use super::instruction::{AOperand, BOperand, DecodedInstruction, InstructionResult};
@@ -108,27 +109,30 @@ impl VirtualCpu {
                     if !self.hidden_state.queue_incoming_interrupts
                         && !self.hidden_state.interrupt_queue.is_empty()
                     {
-                        let oldest_interrupt = self.hidden_state.interrupt_queue.pop_front().unwrap();
+                        let oldest_interrupt =
+                            self.hidden_state.interrupt_queue.pop_front().unwrap();
                         if self.hidden_state.interrupt_address == 0.into() {
                             //Special case: *do* pop an item from the queue, but *don't* actually
                             // handle it. Why? Spec said so. Still needs 4 cycles of stalling.
                             self.hidden_state.instruction_state = TickStep::InterruptStall(4);
-                            return (self,Ok(TickResult::FakeInterrupt));
+                            return (self, Ok(TickResult::FakeInterrupt));
                         }
                         self.hidden_state.queue_incoming_interrupts = true;
-                        
+
                         {
                             let mut mem_ref = memory.borrow_mut();
-                            mem_ref[self.hidden_state.stack_pointer.to_usize()] = self.hidden_state.program_counter;
-                            mem_ref[self.hidden_state.stack_pointer.to_usize() + 1] = self.registers.reg_a;
-                        }    
-                        
+                            mem_ref[self.hidden_state.stack_pointer.to_usize()] =
+                                self.hidden_state.program_counter;
+                            mem_ref[self.hidden_state.stack_pointer.to_usize() + 1] =
+                                self.registers.reg_a;
+                        }
+
                         self.hidden_state.stack_pointer += 2;
                         self.hidden_state.program_counter = self.hidden_state.interrupt_address;
                         self.registers.reg_a = oldest_interrupt;
 
                         self.hidden_state.instruction_state = TickStep::InterruptStall(4);
-                        return (self,Ok(TickResult::Interrupt));
+                        return (self, Ok(TickResult::Interrupt));
                     }
                     //No waiting interrupts, ready to start executing an instruction. So, decode
                     //the next instruction that PC points at.
@@ -285,7 +289,43 @@ impl VirtualCpu {
                             self.hidden_state.program_counter += instruction.word_size();
                             return (self, Ok(TickResult::Instruction));
                         }
-                        InstructionResult::Special => todo!("Implement the Special opcode page."),
+                        InstructionResult::Special => {
+                            let instr_ref = self.hidden_state.current_instruction.as_ref().unwrap();
+                            match instr_ref.opcode {
+                                DcpuInstruction::Jsr => {
+                                    let next_instruction = self.hidden_state.program_counter
+                                        + instr_ref.word_size().into();
+                                    {
+                                        let mut mem_ref = memory.borrow_mut();
+                                        mem_ref[self.hidden_state.stack_pointer.to_usize()] =
+                                            next_instruction;
+                                    }
+                                    self.hidden_state.stack_pointer += 1;
+                                    self.hidden_state.program_counter = instr_ref.fetched_a;
+                                }
+                                DcpuInstruction::Int => {
+                                    if self.hidden_state.queue_incoming_interrupts {
+                                        self.hidden_state
+                                            .interrupt_queue
+                                            .push_back(instr_ref.fetched_a);
+                                    }
+                                }
+                                DcpuInstruction::Iag => {}
+                                DcpuInstruction::Ias => {}
+                                DcpuInstruction::Rfi => {}
+                                DcpuInstruction::Iaq => {}
+                                DcpuInstruction::Hwn => {}
+                                DcpuInstruction::Hwq => {}
+                                DcpuInstruction::Hwi => {}
+                                DcpuInstruction::Undefined => {
+                                    panic!("This should never be possible!!!");
+                                }
+                                _ => {
+                                    panic!("Normal opcode in special opcode handling section.")
+                                }
+                            }
+                            todo!("Implement the Special opcode page.")
+                        }
                     }
 
                     return (self, Ok(TickResult::Instruction));
