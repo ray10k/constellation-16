@@ -386,7 +386,7 @@ impl DcpuInstruction {
 
     pub fn is_branching(&self) -> bool {
         match self {
-            Self::Ifa 
+            Self::Ifa
             | Self::Ifb
             | Self::Ifc
             | Self::Ife

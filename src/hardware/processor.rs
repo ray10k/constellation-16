@@ -198,7 +198,8 @@ impl VirtualCpu {
                     if !instruction.unwrap().opcode.is_branching() {
                         self.hidden_state.instruction_state = TickStep::Ready;
                     }
-                },
+                    return (self, Ok(TickResult::PartialInstr));
+                }
                 TickStep::Stall(0) => {
                     self.hidden_state.instruction_state = Ready;
 
@@ -257,10 +258,9 @@ impl VirtualCpu {
                             self.hidden_state.instruction_state = TickStep::SkipCondition;
                             self.hidden_state.program_counter += instruction.word_size();
                             return (self, Ok(TickResult::Instruction));
-                        },
+                        }
                         InstructionResult::Special => todo!("Implement the Special opcode page."),
                     }
-
 
                     return (self, Ok(TickResult::Instruction));
                 }
