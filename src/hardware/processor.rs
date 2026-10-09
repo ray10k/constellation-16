@@ -290,7 +290,11 @@ impl VirtualCpu {
                             return (self, Ok(TickResult::Instruction));
                         }
                         InstructionResult::Special => {
-                            let instr_ref = self.hidden_state.current_instruction.clone().expect("No a operand, somehow.");
+                            let instr_ref = self
+                                .hidden_state
+                                .current_instruction
+                                .clone()
+                                .expect("No a operand, somehow.");
                             match instr_ref.opcode {
                                 DcpuInstruction::Jsr => {
                                     let next_instruction = self.hidden_state.program_counter
@@ -328,15 +332,18 @@ impl VirtualCpu {
                                     let stack_reg_a;
                                     {
                                         let mem_ref = memory.borrow();
-                                        stack_pc = mem_ref[self.hidden_state.stack_pointer.to_usize()];
-                                        stack_reg_a = mem_ref[self.hidden_state.stack_pointer.to_usize()-1];
+                                        stack_pc =
+                                            mem_ref[self.hidden_state.stack_pointer.to_usize()];
+                                        stack_reg_a =
+                                            mem_ref[self.hidden_state.stack_pointer.to_usize() - 1];
                                     }
                                     self.hidden_state.stack_pointer += 2;
                                     self.hidden_state.program_counter = stack_pc;
                                     self.registers.reg_a = stack_reg_a;
                                     self.hidden_state.queue_incoming_interrupts = false;
                                 }
-                                DcpuInstruction::Iaq => { //weird instruction.
+                                DcpuInstruction::Iaq => {
+                                    //weird instruction.
                                     if instr_ref.fetched_a == 0.into() {
                                         self.hidden_state.queue_incoming_interrupts = true;
                                     } else {
@@ -344,13 +351,22 @@ impl VirtualCpu {
                                     }
                                 }
                                 DcpuInstruction::Hwn => {
-                                    return (self,Ok(TickResult::NumberHardware(instr_ref.fetched_a)));
+                                    return (
+                                        self,
+                                        Ok(TickResult::NumberHardware(instr_ref.fetched_a)),
+                                    );
                                 }
                                 DcpuInstruction::Hwq => {
-                                    return (self,Ok(TickResult::QueryHardware(instr_ref.fetched_a)));
+                                    return (
+                                        self,
+                                        Ok(TickResult::QueryHardware(instr_ref.fetched_a)),
+                                    );
                                 }
                                 DcpuInstruction::Hwi => {
-                                    return (self,Ok(TickResult::InterruptHardware(instr_ref.fetched_a)));
+                                    return (
+                                        self,
+                                        Ok(TickResult::InterruptHardware(instr_ref.fetched_a)),
+                                    );
                                 }
                                 DcpuInstruction::Undefined => {
                                     panic!("This should never be possible!!!");
@@ -820,12 +836,12 @@ mod tests {
         let mut memory: Box<[Word]> = Box::from([Word(0); 0xffff]);
         memory[0] = (0x08 | (0x01 << 5)).into(); //MOD B, A
         let memory = Rc::new(RefCell::new(memory));
-        let mut processor = VirtualCpu::default();
-        let (mut processor, tick_result) = processor.processor_step(Rc::clone(&memory));
+        let processor = VirtualCpu::default();
+        let (processor, tick_result) = processor.processor_step(Rc::clone(&memory));
         assert_eq!(Ok(TickResult::PartialInstr), tick_result);
-        let (mut processor, tick_result) = processor.processor_step(Rc::clone(&memory));
+        let (processor, tick_result) = processor.processor_step(Rc::clone(&memory));
         assert_eq!(Ok(TickResult::PartialInstr), tick_result);
-        let (mut processor, tick_result) = processor.processor_step(Rc::clone(&memory));
+        let (_, tick_result) = processor.processor_step(Rc::clone(&memory));
         assert_eq!(Ok(TickResult::Instruction), tick_result);
     }
 }
