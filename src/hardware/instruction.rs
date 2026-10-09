@@ -261,6 +261,48 @@ impl BOperand {
     }
 }
 
+impl TryInto<BOperand> for AOperand {
+    type Error = (); //Can only fail if the `a` operand was a small-literal.
+
+    fn try_into(self) -> Result<BOperand, Self::Error> {
+        match self {
+            AOperand::RegA => Ok(BOperand::RegA),
+            AOperand::RegB => Ok(BOperand::RegB),
+            AOperand::RegC => Ok(BOperand::RegC),
+            AOperand::RegX => Ok(BOperand::RegX),
+            AOperand::RegY => Ok(BOperand::RegY),
+            AOperand::RegZ => Ok(BOperand::RegZ),
+            AOperand::RegI => Ok(BOperand::RegI),
+            AOperand::RegJ => Ok(BOperand::RegJ),
+            AOperand::DerefA => Ok(BOperand::DerefA),
+            AOperand::DerefB => Ok(BOperand::DerefB),
+            AOperand::DerefC => Ok(BOperand::DerefC),
+            AOperand::DerefX => Ok(BOperand::DerefX),
+            AOperand::DerefY => Ok(BOperand::DerefY),
+            AOperand::DerefZ => Ok(BOperand::DerefZ),
+            AOperand::DerefI => Ok(BOperand::DerefI),
+            AOperand::DerefJ => Ok(BOperand::DerefJ),
+            AOperand::OffsetA => Ok(BOperand::OffsetA),
+            AOperand::OffsetB => Ok(BOperand::OffsetB),
+            AOperand::OffsetC => Ok(BOperand::OffsetC),
+            AOperand::OffsetX => Ok(BOperand::OffsetX),
+            AOperand::OffsetY => Ok(BOperand::OffsetY),
+            AOperand::OffsetZ => Ok(BOperand::OffsetZ),
+            AOperand::OffsetI => Ok(BOperand::OffsetI),
+            AOperand::OffsetJ => Ok(BOperand::OffsetJ),
+            AOperand::Pop => Ok(BOperand::Push),
+            AOperand::Peek => Ok(BOperand::Peek),
+            AOperand::Pick => Ok(BOperand::Pick),
+            AOperand::StackPointer => Ok(BOperand::StackPointer),
+            AOperand::ProgramCounter => Ok(BOperand::ProgramCounter),
+            AOperand::Excess => Ok(BOperand::Excess),
+            AOperand::DerefImmediate => Ok(BOperand::DerefImmediate),
+            AOperand::ValueImmediate => Ok(BOperand::ValueImmediate),
+            AOperand::Literal(_) => Err(()),
+        }
+    }
+}
+
 #[derive(FromPrimitive, Debug, PartialEq, Eq, Clone)]
 pub enum DcpuInstruction {
     /// Invalid instruction. May crash the CPU if you like.

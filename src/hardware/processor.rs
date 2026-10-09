@@ -85,7 +85,7 @@ pub enum TickResult {
     QueryHardware(Word),
     /// A `HWN` instruction finished. Same as `Instruction` variant, but the number of connected peripherals
     /// must be written to the given target.
-    NumberHardware(AOperand),
+    NumberHardware(Word),
     /// A `HWI` instruction finished. Same as `Instruction` variant, but the peripheral at the indicated address
     /// must receive an interrupt.
     InterruptHardware(Word),
@@ -290,7 +290,7 @@ impl VirtualCpu {
                             return (self, Ok(TickResult::Instruction));
                         }
                         InstructionResult::Special => {
-                            let instr_ref = self.hidden_state.current_instruction.as_ref().unwrap();
+                            let instr_ref = self.hidden_state.current_instruction.clone().expect("No a operand, somehow.");
                             match instr_ref.opcode {
                                 DcpuInstruction::Jsr => {
                                     let next_instruction = self.hidden_state.program_counter
@@ -304,19 +304,54 @@ impl VirtualCpu {
                                     self.hidden_state.program_counter = instr_ref.fetched_a;
                                 }
                                 DcpuInstruction::Int => {
-                                    if self.hidden_state.queue_incoming_interrupts {
-                                        self.hidden_state
-                                            .interrupt_queue
-                                            .push_back(instr_ref.fetched_a);
+                                    self.hidden_state
+                                        .interrupt_queue
+                                        .push_back(instr_ref.fetched_a);
+                                }
+                                DcpuInstruction::Iag => {
+                                    if let Ok(b) = instr_ref.operand_a.clone().try_into() {
+                                        self.store_value(
+                                            &b,
+                                            Rc::clone(&memory),
+                                            false,
+                                            self.hidden_state.interrupt_address,
+                                        );
+                                    }; //If this fails, it's a small literal which should silently
+                                    //fail anyway.
+                                }
+                                DcpuInstruction::Ias => {
+                                    self.hidden_state.interrupt_address = instr_ref.fetched_a;
+                                }
+                                DcpuInstruction::Rfi => {
+                                    //Grab two items from the stack. One for the A register, one for PC
+                                    let stack_pc;
+                                    let stack_reg_a;
+                                    {
+                                        let mem_ref = memory.borrow();
+                                        stack_pc = mem_ref[self.hidden_state.stack_pointer.to_usize()];
+                                        stack_reg_a = mem_ref[self.hidden_state.stack_pointer.to_usize()-1];
+                                    }
+                                    self.hidden_state.stack_pointer += 2;
+                                    self.hidden_state.program_counter = stack_pc;
+                                    self.registers.reg_a = stack_reg_a;
+                                    self.hidden_state.queue_incoming_interrupts = false;
+                                }
+                                DcpuInstruction::Iaq => { //weird instruction.
+                                    if instr_ref.fetched_a == 0.into() {
+                                        self.hidden_state.queue_incoming_interrupts = true;
+                                    } else {
+                                        self.hidden_state.queue_incoming_interrupts = false;
                                     }
                                 }
-                                DcpuInstruction::Iag => {}
-                                DcpuInstruction::Ias => {}
-                                DcpuInstruction::Rfi => {}
-                                DcpuInstruction::Iaq => {}
-                                DcpuInstruction::Hwn => {}
-                                DcpuInstruction::Hwq => {}
-                                DcpuInstruction::Hwi => {}
+                                DcpuInstruction::Hwn => {
+                                    return (self,Ok(TickResult::NumberHardware(instr_ref.fetched_a)));
+                                }
+                                DcpuInstruction::Hwq => {
+                                    return (self,Ok(TickResult::QueryHardware(instr_ref.fetched_a)));
+                                }
+                                DcpuInstruction::Hwi => {
+                                    return (self,Ok(TickResult::InterruptHardware(instr_ref.fetched_a)));
+                                }
                                 DcpuInstruction::Undefined => {
                                     panic!("This should never be possible!!!");
                                 }
@@ -324,7 +359,6 @@ impl VirtualCpu {
                                     panic!("Normal opcode in special opcode handling section.")
                                 }
                             }
-                            todo!("Implement the Special opcode page.")
                         }
                     }
 
