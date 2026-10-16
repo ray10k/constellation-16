@@ -100,6 +100,7 @@ impl VirtualCpu {
     /// If the Word that the program counter points at could not be interpreted as an
     /// instruction, the `Err` variant is returned.
     pub fn processor_step(mut self, memory: Memory) -> (Self, Result<TickResult, Word>) {
+        print!("*");
         loop {
             let tick_step = self.hidden_state.instruction_state.clone();
             println!("{:?}", tick_step);
@@ -232,6 +233,7 @@ impl VirtualCpu {
                 }
                 TickStep::Stall(0) => {
                     self.hidden_state.instruction_state = Ready;
+                    self.hidden_state.program_counter += 1;
 
                     let instruction = self
                         .hidden_state
@@ -505,12 +507,12 @@ impl VirtualCpu {
             AOperand::ProgramCounter => self.hidden_state.program_counter,
             AOperand::Excess => self.hidden_state.reg_excess,
             AOperand::DerefImmediate => {
-                let next_word = mem_ref[self.hidden_state.program_counter.to_usize()];
+                let next_word = mem_ref[self.hidden_state.program_counter.to_usize() + 1];
                 self.hidden_state.program_counter += 1;
                 mem_ref[next_word.to_usize()]
             }
             AOperand::ValueImmediate => {
-                let next_word = mem_ref[self.hidden_state.program_counter.to_usize()];
+                let next_word = mem_ref[self.hidden_state.program_counter.to_usize() + 1];
                 self.hidden_state.program_counter += 1;
                 next_word
             }
@@ -818,11 +820,17 @@ impl VirtualCpu {
                     memory.borrow_mut()[dest_addr] = value;
                 }
             }
-            BOperand::StackPointer => todo!(),
-            BOperand::ProgramCounter => todo!(),
-            BOperand::Excess => todo!(),
-            BOperand::DerefImmediate => todo!(),
-            BOperand::ValueImmediate => todo!(),
+            BOperand::StackPointer => {
+                self.hidden_state.stack_pointer = value;
+            }
+            BOperand::ProgramCounter => {
+                self.hidden_state.program_counter = value;
+            }
+            BOperand::Excess => {
+                self.hidden_state.reg_excess = value;
+            }
+            BOperand::DerefImmediate => todo!(), //Not sure what this should do...
+            BOperand::ValueImmediate => { /*Fails silently.*/ }
         }
     }
 }
@@ -843,5 +851,73 @@ mod tests {
         assert_eq!(Ok(TickResult::PartialInstr), tick_result);
         let (_, tick_result) = processor.processor_step(Rc::clone(&memory));
         assert_eq!(Ok(TickResult::Instruction), tick_result);
+    }
+
+    #[test]
+    fn test_fibbonacci_seq() {
+        let test_program: [u16; 15] = [
+            0b100001_00000_00001, //SET A, 0
+            0b100010_00001_00001, //SET B, 1
+            0b011111_00010_00001, //SET C, 0x0100
+            0b0000000100000000,
+            0b011111_00011_00001, //SET X, 0x0200
+            0b0000001000000000,
+            0b000001_00000_00010, //ADD A, B
+            0b000000_01010_00001, //SET [C], A
+            0b000001_00000_01100, //XOR A, B
+            0b000000_00001_01100, //XOR B, A
+            0b000001_00000_01100, //XOR A, B
+            0b100001_00010_00010, //ADD 1, C
+            0b000011_00010_10110, //IFL C, X
+            0b100111_11100_00001, //SET PC, 6
+            0b100000_11100_00010, //ADD PC, -1
+        ];
+        let mut memory = [Word(0); 0xffff];
+        for i in 0..test_program.len() {
+            memory[i] = test_program[i].into();
+        }
+        let memory_box: Box<[Word]> = Box::from(memory);
+        let memory = Rc::new(RefCell::new(memory_box));
+
+        let mut processor = VirtualCpu::default();
+
+        let mut last_c = Word(0);
+        let mut ticks = 0;
+
+        while ticks < 16 {
+            let result: Result<TickResult, Word>;
+            (processor, result) = processor.processor_step(Rc::clone(&memory));
+
+            println!(
+                "{:04x}; {:04x}; {:04x}; {:04x}; PC {:04x}",
+                *processor.registers.reg_a,
+                *processor.registers.reg_b,
+                *processor.registers.reg_c,
+                *processor.registers.reg_x,
+                *processor.hidden_state.program_counter
+            );
+
+            //As a 'terminating condition' for the test: If register C doesn't change for 16
+            // ticks, then the program must be in the infinite loop and finished.
+            ticks += 1;
+            if last_c != processor.registers.reg_c {
+                last_c = processor.registers.reg_c;
+                ticks = 0;
+            }
+            if let Err(w) = result {
+                assert!(false, "Error at instruction {:x}", *w);
+            }
+        }
+
+        assert_eq!(
+            Word(0x000E),
+            processor.hidden_state.program_counter,
+            "Halted at instruction 0x{:04x} instead of 0x000E",
+            *processor.hidden_state.program_counter
+        );
+        let mem_borrow = memory.borrow();
+        for i in 0x0100..0x0200usize {
+            print!("{}, ", *mem_borrow[i]);
+        }
     }
 }
