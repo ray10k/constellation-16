@@ -103,7 +103,7 @@ impl VirtualCpu {
         print!("*");
         loop {
             let tick_step = self.hidden_state.instruction_state.clone();
-            println!("{:?}", tick_step);
+            //println!("{:?}", tick_step);
             match tick_step {
                 TickStep::Ready => {
                     //Check if an interrupt is waiting and needs to be handled first!
@@ -232,15 +232,16 @@ impl VirtualCpu {
                     return (self, Ok(TickResult::PartialInstr));
                 }
                 TickStep::Stall(0) => {
-                    self.hidden_state.instruction_state = Ready;
-                    self.hidden_state.program_counter += 1;
-
+                    
                     let instruction = self
                         .hidden_state
                         .current_instruction
                         .as_ref()
                         .expect("Instruction was not correctly parsed.")
                         .clone();
+
+                    println!("{instruction:?}");
+                    
                     match instruction.opcode.run_instruction(
                         instruction.fetched_a,
                         instruction.fetched_b,
@@ -250,7 +251,7 @@ impl VirtualCpu {
                         }
                         InstructionResult::Value { val } => {
                             self.store_value(
-                                &instruction.operand_b.expect("Bad b-operand"),
+                                &instruction.operand_b.as_ref().expect("Bad b-operand"),
                                 Rc::clone(&memory),
                                 instruction.operand_a.uses_next_word(),
                                 val,
@@ -258,7 +259,7 @@ impl VirtualCpu {
                         }
                         InstructionResult::ValueCarry { val, ex } => {
                             self.store_value(
-                                &instruction.operand_b.expect("Bad b-operand"),
+                                &instruction.operand_b.as_ref().expect("Bad b-operand"),
                                 Rc::clone(&memory),
                                 instruction.operand_a.uses_next_word(),
                                 val,
@@ -267,7 +268,7 @@ impl VirtualCpu {
                         }
                         InstructionResult::ValueIncrement { val } => {
                             self.store_value(
-                                &instruction.operand_b.expect("Bad b-operand"),
+                                &instruction.operand_b.as_ref().expect("Bad b-operand"),
                                 Rc::clone(&memory),
                                 instruction.operand_a.uses_next_word(),
                                 val,
@@ -277,7 +278,7 @@ impl VirtualCpu {
                         }
                         InstructionResult::ValueDecrement { val } => {
                             self.store_value(
-                                &instruction.operand_b.expect("Bad b-operand"),
+                                &instruction.operand_b.as_ref().expect("Bad b-operand"),
                                 Rc::clone(&memory),
                                 instruction.operand_a.uses_next_word(),
                                 val,
@@ -288,7 +289,7 @@ impl VirtualCpu {
                         InstructionResult::Skip => {
                             //No value to save, *but*. Will need to start skipping over stuff.
                             self.hidden_state.instruction_state = TickStep::SkipCondition;
-                            self.hidden_state.program_counter += instruction.word_size();
+                            //self.hidden_state.program_counter += instruction.word_size();
                             return (self, Ok(TickResult::Instruction));
                         }
                         InstructionResult::Special => {
@@ -378,6 +379,19 @@ impl VirtualCpu {
                                 }
                             }
                         }
+                    }
+
+                    self.hidden_state.instruction_state = Ready;
+
+                    if let Some(BOperand::ProgramCounter) = instruction.operand_b {
+                        //Do nothing.
+                    }
+                    else if let AOperand::ProgramCounter = instruction.operand_a && instruction.opcode.is_special()
+                    {
+                        //still do nothing.
+                    }
+                    else { //Program counter *not* touched by instruction, update "normally."
+                        self.hidden_state.program_counter += 1;
                     }
 
                     return (self, Ok(TickResult::Instruction));
@@ -645,6 +659,7 @@ impl VirtualCpu {
     }
 
     fn store_value(&mut self, operand: &BOperand, memory: Memory, a_next_word: bool, value: Word) {
+        println!("STORE b-op:{operand:?}; value:{:04x}",*value);
         match operand {
             BOperand::RegA => self.registers.reg_a = value,
             BOperand::RegB => self.registers.reg_b = value,
@@ -862,15 +877,15 @@ mod tests {
             0b0000000100000000,
             0b011111_00011_00001, //SET X, 0x0200
             0b0000001000000000,
-            0b000001_00000_00010, //ADD A, B
+            0b000001_00000_00010, //ADD A, B (address: 6)
             0b000000_01010_00001, //SET [C], A
             0b000001_00000_01100, //XOR A, B
             0b000000_00001_01100, //XOR B, A
             0b000001_00000_01100, //XOR A, B
-            0b100001_00010_00010, //ADD 1, C
+            0b100010_00010_00010, //ADD 1, C (address: B/11)
             0b000011_00010_10110, //IFL C, X
             0b100111_11100_00001, //SET PC, 6
-            0b100000_11100_00010, //ADD PC, -1
+            0b100001_11100_00010, //ADD PC, 0 (address: E/14)
         ];
         let mut memory = [Word(0); 0xffff];
         for i in 0..test_program.len() {
@@ -889,7 +904,7 @@ mod tests {
             (processor, result) = processor.processor_step(Rc::clone(&memory));
 
             println!(
-                "{:04x}; {:04x}; {:04x}; {:04x}; PC {:04x}",
+                "A:{:04x}; B:{:04x}; C:{:04x}; X:{:04x}; PC:{:04x}",
                 *processor.registers.reg_a,
                 *processor.registers.reg_b,
                 *processor.registers.reg_c,
