@@ -1,14 +1,13 @@
-use std::cell::RefCell;
+
 use std::collections::VecDeque;
-use std::rc::Rc;
 
 use crate::hardware::instruction::DcpuInstruction;
 use crate::hardware::processor::TickStep::{FetchB, InterruptStall, Ready, Stall};
+use crate::hardware::memory::{Memory,MemOp};
 
 use super::instruction::{AOperand, BOperand, DecodedInstruction, InstructionResult};
 use super::word::Word;
 
-type Memory = Rc<RefCell<Box<[Word]>>>;
 
 #[derive(Default)]
 pub struct Registers {
@@ -158,7 +157,7 @@ impl VirtualCpu {
                     let operand = instruction.operand_a.clone();
                     let opcode = instruction.opcode.clone();
 
-                    let op_a = self.fetch_a_value(operand.clone(), Rc::clone(&memory));
+                    let op_a = self.fetch_a_value(operand.clone(), memory.dup());
                     self.hidden_state
                         .current_instruction
                         .as_mut()
@@ -197,7 +196,7 @@ impl VirtualCpu {
                         .clone();
                     let opcode = instruction.opcode.clone();
 
-                    let op_b = self.fetch_b_value(&operand, Rc::clone(&memory));
+                    let op_b = self.fetch_b_value(&operand, memory.dup());
                     self.hidden_state
                         .current_instruction
                         .as_mut()
@@ -252,7 +251,7 @@ impl VirtualCpu {
                         InstructionResult::Value { val } => {
                             self.store_value(
                                 &instruction.operand_b.as_ref().expect("Bad b-operand"),
-                                Rc::clone(&memory),
+                                memory.dup(),
                                 instruction.operand_a.uses_next_word(),
                                 val,
                             );
@@ -260,7 +259,7 @@ impl VirtualCpu {
                         InstructionResult::ValueCarry { val, ex } => {
                             self.store_value(
                                 &instruction.operand_b.as_ref().expect("Bad b-operand"),
-                                Rc::clone(&memory),
+                                memory.dup(),
                                 instruction.operand_a.uses_next_word(),
                                 val,
                             );
@@ -269,7 +268,7 @@ impl VirtualCpu {
                         InstructionResult::ValueIncrement { val } => {
                             self.store_value(
                                 &instruction.operand_b.as_ref().expect("Bad b-operand"),
-                                Rc::clone(&memory),
+                                memory.dup(),
                                 instruction.operand_a.uses_next_word(),
                                 val,
                             );
@@ -279,7 +278,7 @@ impl VirtualCpu {
                         InstructionResult::ValueDecrement { val } => {
                             self.store_value(
                                 &instruction.operand_b.as_ref().expect("Bad b-operand"),
-                                Rc::clone(&memory),
+                                memory.dup(),
                                 instruction.operand_a.uses_next_word(),
                                 val,
                             );
@@ -319,7 +318,7 @@ impl VirtualCpu {
                                     if let Ok(b) = instr_ref.operand_a.clone().try_into() {
                                         self.store_value(
                                             &b,
-                                            Rc::clone(&memory),
+                                            memory.dup(),
                                             false,
                                             self.hidden_state.interrupt_address,
                                         );
@@ -856,43 +855,44 @@ mod tests {
 
     #[test]
     fn test_basic_execute() {
-        let mut memory: Box<[Word]> = Box::from([Word(0); 0xffff]);
-        memory[0] = (0x08 | (0x01 << 5)).into(); //MOD B, A
-        let memory = Rc::new(RefCell::new(memory));
+        //let mut memory: Box<[Word]> = Box::from([Word(0); 0xffff]);
+        //memory[0] = (0x08 | (0x01 << 5)).into(); //MOD B, A
+        //let memory = Rc::new(RefCell::new(memory));
+        let memory = Memory::new_empty();
+        {
+            //Separate scope to ensure the mutable borrow gets dropped.
+            memory.borrow_mut()[0] = (0x08 | (0x01 << 5)).into();
+        }
         let processor = VirtualCpu::default();
-        let (processor, tick_result) = processor.processor_step(Rc::clone(&memory));
+        let (processor, tick_result) = processor.processor_step(memory.dup());
         assert_eq!(Ok(TickResult::PartialInstr), tick_result);
-        let (processor, tick_result) = processor.processor_step(Rc::clone(&memory));
+        let (processor, tick_result) = processor.processor_step(memory.dup());
         assert_eq!(Ok(TickResult::PartialInstr), tick_result);
-        let (_, tick_result) = processor.processor_step(Rc::clone(&memory));
+        let (_, tick_result) = processor.processor_step(memory.dup());
         assert_eq!(Ok(TickResult::Instruction), tick_result);
     }
 
     #[test]
     fn test_fibbonacci_seq() {
-        let test_program: [u16; 15] = [
-            0b100001_00000_00001, //SET A, 0
-            0b100010_00001_00001, //SET B, 1
-            0b011111_00010_00001, //SET C, 0x0100
-            0b0000000100000000,
-            0b011111_00011_00001, //SET X, 0x0200
-            0b0000001000000000,
-            0b000001_00000_00010, //ADD A, B (address: 6)
-            0b000000_01010_00001, //SET [C], A
-            0b000001_00000_01100, //XOR A, B
-            0b000000_00001_01100, //XOR B, A
-            0b000001_00000_01100, //XOR A, B
-            0b100010_00010_00010, //ADD 1, C (address: B/11)
-            0b000011_00010_10110, //IFL C, X
-            0b100111_11100_00001, //SET PC, 6
-            0b100001_11100_00010, //ADD PC, 0 (address: E/14)
+        let test_program: [Word; 15] = [
+            0b100001_00000_00001.into(), //SET A, 0
+            0b100010_00001_00001.into(), //SET B, 1
+            0b011111_00010_00001.into(), //SET C, 0x0100
+            0b0000000100000000.into(),
+            0b011111_00011_00001.into(), //SET X, 0x0200
+            0b0000001000000000.into(),
+            0b000001_00000_00010.into(), //ADD A, B (address: 6)
+            0b000000_01010_00001.into(), //SET [C], A
+            0b000001_00000_01100.into(), //XOR A, B
+            0b000000_00001_01100.into(), //XOR B, A
+            0b000001_00000_01100.into(), //XOR A, B
+            0b100010_00010_00010.into(), //ADD 1, C (address: B/11)
+            0b000011_00010_10110.into(), //IFL C, X
+            0b100111_11100_00001.into(), //SET PC, 6
+            0b100001_11100_00010.into(), //ADD PC, 0 (address: E/14)
         ];
-        let mut memory = [Word(0); 0xffff];
-        for i in 0..test_program.len() {
-            memory[i] = test_program[i].into();
-        }
-        let memory_box: Box<[Word]> = Box::from(memory);
-        let memory = Rc::new(RefCell::new(memory_box));
+
+        let memory = Memory::new_preinit(&test_program[..]);
 
         let mut processor = VirtualCpu::default();
 
@@ -901,7 +901,7 @@ mod tests {
 
         while ticks < 16 {
             let result: Result<TickResult, Word>;
-            (processor, result) = processor.processor_step(Rc::clone(&memory));
+            (processor, result) = processor.processor_step(memory.dup());
 
             println!(
                 "A:{:04x}; B:{:04x}; C:{:04x}; X:{:04x}; PC:{:04x}",
