@@ -1,13 +1,11 @@
-
 use std::collections::VecDeque;
 
 use crate::hardware::instruction::DcpuInstruction;
+use crate::hardware::memory::{MemOp, Memory};
 use crate::hardware::processor::TickStep::{FetchB, InterruptStall, Ready, Stall};
-use crate::hardware::memory::{Memory,MemOp};
 
 use super::instruction::{AOperand, BOperand, DecodedInstruction, InstructionResult};
 use super::word::Word;
-
 
 #[derive(Default)]
 pub struct Registers {
@@ -231,7 +229,6 @@ impl VirtualCpu {
                     return (self, Ok(TickResult::PartialInstr));
                 }
                 TickStep::Stall(0) => {
-                    
                     let instruction = self
                         .hidden_state
                         .current_instruction
@@ -240,7 +237,7 @@ impl VirtualCpu {
                         .clone();
 
                     println!("{instruction:?}");
-                    
+
                     match instruction.opcode.run_instruction(
                         instruction.fetched_a,
                         instruction.fetched_b,
@@ -384,12 +381,12 @@ impl VirtualCpu {
 
                     if let Some(BOperand::ProgramCounter) = instruction.operand_b {
                         //Do nothing.
-                    }
-                    else if let AOperand::ProgramCounter = instruction.operand_a && instruction.opcode.is_special()
+                    } else if let AOperand::ProgramCounter = instruction.operand_a
+                        && instruction.opcode.is_special()
                     {
                         //still do nothing.
-                    }
-                    else { //Program counter *not* touched by instruction, update "normally."
+                    } else {
+                        //Program counter *not* touched by instruction, update "normally."
                         self.hidden_state.program_counter += 1;
                     }
 
@@ -658,7 +655,7 @@ impl VirtualCpu {
     }
 
     fn store_value(&mut self, operand: &BOperand, memory: Memory, a_next_word: bool, value: Word) {
-        println!("STORE b-op:{operand:?}; value:{:04x}",*value);
+        println!("STORE b-op:{operand:?}; value:{:04x}", *value);
         match operand {
             BOperand::RegA => self.registers.reg_a = value,
             BOperand::RegB => self.registers.reg_b = value,
