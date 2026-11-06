@@ -7,7 +7,7 @@ use crate::hardware::processor::TickStep::{FetchB, InterruptStall, Ready, Stall}
 use super::instruction::{AOperand, BOperand, DecodedInstruction, InstructionResult};
 use super::word::Word;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Registers {
     //General-purpose registers.
     pub reg_a: Word,
@@ -20,8 +20,8 @@ pub struct Registers {
     pub reg_j: Word,
 }
 
-#[derive(Default)]
-struct ProcessorHiddenState {
+#[derive(Default, Debug)]
+pub(crate) struct ProcessorHiddenState {
     //"Special" registers.
     /// Pointer to the next instruction.
     program_counter: Word,
@@ -47,7 +47,7 @@ struct ProcessorHiddenState {
 #[derive(Default)]
 pub struct VirtualCpu {
     pub registers: Registers,
-    hidden_state: ProcessorHiddenState,
+    pub(crate) hidden_state: ProcessorHiddenState,
 }
 
 #[derive(Default, Clone, Debug)]

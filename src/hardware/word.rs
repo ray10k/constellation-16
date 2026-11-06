@@ -1,7 +1,16 @@
 use std::ops::{Add, AddAssign, BitAnd, Deref, DerefMut, Sub, SubAssign};
+use std::fmt::Display;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
 pub struct Word(pub u16);
+
+pub const ZERO:Word = Word(0);
+
+impl Display for Word {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{:04x}",self.0)
+    }
+}
 
 impl Deref for Word {
     type Target = u16;
