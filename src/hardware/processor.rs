@@ -1,8 +1,8 @@
 use std::collections::VecDeque;
 
-use crate::hardware::instruction::DcpuInstruction;
-use crate::hardware::memory::{MemOp, Memory};
-use crate::hardware::processor::TickStep::{FetchB, InterruptStall, Ready, Stall};
+use crate::instruction::DcpuInstruction;
+use crate::memory::{MemOp, Memory};
+use crate::processor::TickStep::{FetchB, InterruptStall, Ready, Stall};
 
 use super::instruction::{AOperand, BOperand, DecodedInstruction, InstructionResult};
 use super::word::Word;

@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::hardware::word::Word;
+use crate::word::Word;
 
 pub type Memory = Rc<RefCell<Box<[Word]>>>;
 

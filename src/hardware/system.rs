@@ -1,8 +1,7 @@
-use crate::hardware::memory::{Memory, MemOp};
-use crate::hardware::peripheral::Peripheral;
-use crate::hardware::processor::{TickResult, VirtualCpu};
-use crate::hardware::instruction::AOperand;
-use crate::hardware::word::{Word, ZERO};
+use crate::memory::{Memory, MemOp};
+use crate::peripheral::Peripheral;
+use crate::processor::{TickResult, VirtualCpu};
+use crate::word::{Word, ZERO};
 
 use std::fmt::Debug;
 
@@ -30,7 +29,7 @@ impl Debug for VirtualComputer {
 }
 
 impl VirtualComputer {
-    fn new_with_initial(initial_memory:&[Word]) -> Self {
+    pub fn new_with_initial(initial_memory:&[Word]) -> Self {
         Self {
             cpu: Default::default(),
             memory: Memory::new_preinit(initial_memory),
@@ -38,11 +37,11 @@ impl VirtualComputer {
         }
     }
 
-    fn push_peripheral(&mut self, peripheral:Box<dyn Peripheral>) {
+    pub fn push_peripheral(&mut self, peripheral:Box<dyn Peripheral>) {
         self.peripherals.push(peripheral);
     }
 
-    fn run_tick(mut self) -> Result<(),()> {
+    pub fn run_tick(mut self) -> Result<(),()> {
         let tick = self.cpu.processor_step(self.memory.dup());
         self.cpu = tick.0;
         match tick.1 {

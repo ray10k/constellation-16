@@ -1,6 +1,6 @@
-use crate::hardware::memory::Memory;
-use crate::hardware::processor::Registers;
-use crate::hardware::word::Word;
+use crate::memory::Memory;
+use crate::processor::Registers;
+use crate::word::Word;
 
 /// Description for a peripheral, contains the information needed for HWQ instructions.
 pub struct PeripheralInfo {

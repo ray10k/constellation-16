@@ -3,6 +3,10 @@ name = "constellation-16"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name="constellation_hardware"
+path="src/hardware/lib.rs"
+
 [dependencies]
 num = "0.4.3"
 num-derive = "0.4.2"
