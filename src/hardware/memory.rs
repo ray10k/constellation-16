@@ -5,6 +5,7 @@ use crate::word::Word;
 
 pub type Memory = Rc<RefCell<Box<[Word]>>>;
 
+///Convenience functions for the `Memory` type.
 pub(crate) trait MemOp {
     /// Duplicate the memory-reference for later use. Wrapper for `rc::clone()`.
     fn dup(&self) -> Self;
@@ -27,6 +28,7 @@ impl MemOp for Memory {
 
     fn new_preinit(initial: &[Word]) -> Self {
         let mut memory = [Word(0); 0xffff];
+        //todo: only use the first 65535 Words, if `initial` is longer than 65535 Words.
         for (index, value) in initial.iter().enumerate() {
             memory[index] = *value;
         }

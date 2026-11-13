@@ -5,6 +5,8 @@ use crate::word::{Word, ZERO};
 
 use std::fmt::Debug;
 
+///'Motherboard' for a virtual computer, containing a CPU, memory and connections for
+/// the necessary peripherals.
 pub struct VirtualComputer {
     cpu: VirtualCpu,
     memory: Memory,
@@ -29,6 +31,8 @@ impl Debug for VirtualComputer {
 }
 
 impl VirtualComputer {
+    ///Initializes a computer with the given program. Note that if `initial_memory` contains more than 65535 `Word`s, 
+    /// only the first 65535 `Word`s will be read into memory.
     pub fn new_with_initial(initial_memory:&[Word]) -> Self {
         Self {
             cpu: Default::default(),
@@ -37,10 +41,13 @@ impl VirtualComputer {
         }
     }
 
+    ///Add a new peripheral to the system. Note that doing so after the first call to `run_tick()` results in undefined
+    /// behaviour.
     pub fn push_peripheral(&mut self, peripheral:Box<dyn Peripheral>) {
         self.peripherals.push(peripheral);
     }
 
+    ///Progress time by 1 tick, running the CPU and updating all connected peripherals.
     pub fn run_tick(mut self) -> Result<(),()> {
         let tick = self.cpu.processor_step(self.memory.dup());
         self.cpu = tick.0;

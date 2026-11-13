@@ -8,6 +8,7 @@ use super::instruction::{AOperand, BOperand, DecodedInstruction, InstructionResu
 use super::word::Word;
 
 #[derive(Default, Debug)]
+///General-purpose registers, grouped together.
 pub struct Registers {
     //General-purpose registers.
     pub reg_a: Word,
@@ -21,6 +22,8 @@ pub struct Registers {
 }
 
 #[derive(Default, Debug)]
+///Special registers, along with some other data needed to run a computer.
+/// Kept separate for  privacy reasons.
 pub(crate) struct ProcessorHiddenState {
     //"Special" registers.
     /// Pointer to the next instruction.
@@ -45,12 +48,14 @@ pub(crate) struct ProcessorHiddenState {
 }
 
 #[derive(Default)]
+///Virtual CPU.
 pub struct VirtualCpu {
     pub registers: Registers,
     pub(crate) hidden_state: ProcessorHiddenState,
 }
 
 #[derive(Default, Clone, Debug)]
+///Current state of the processor, to track sub-steps when executing an instruction.
 enum TickStep {
     #[default]
     /// The processor is at the start of the current instruction.
@@ -68,6 +73,7 @@ enum TickStep {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
+///Result of calling `tick()` once on a `VirtualCpu`.
 pub enum TickResult {
     /// An instruction has been partially executed. Next tick will continue execution of this same instruction.
     PartialInstr,
@@ -94,13 +100,11 @@ impl VirtualCpu {
     /// longer-running operations.
     ///
     /// Returns the `VirtualCpu` itself, and the outcome of the current processor-tick.
-    /// If the Word that the program counter points at could not be interpreted as an
+    /// If the `Word`` that the program counter points at could not be interpreted as an
     /// instruction, the `Err` variant is returned.
     pub fn processor_step(mut self, memory: Memory) -> (Self, Result<TickResult, Word>) {
-        print!("*");
         loop {
             let tick_step = self.hidden_state.instruction_state.clone();
-            //println!("{:?}", tick_step);
             match tick_step {
                 TickStep::Ready => {
                     //Check if an interrupt is waiting and needs to be handled first!
@@ -235,8 +239,6 @@ impl VirtualCpu {
                         .as_ref()
                         .expect("Instruction was not correctly parsed.")
                         .clone();
-
-                    println!("{instruction:?}");
 
                     match instruction.opcode.run_instruction(
                         instruction.fetched_a,
@@ -410,6 +412,7 @@ impl VirtualCpu {
         (self, Ok(TickResult::PartialInstr))
     }
 
+    ///Fetch the current value for the source/a-operand. Takes a snapshot of the value as-it-is.
     fn fetch_a_value(&mut self, operand: AOperand, memory: Memory) -> Word {
         let mem_ref = memory.borrow_mut();
         let retval = match operand {
@@ -533,6 +536,7 @@ impl VirtualCpu {
             .expect("impossible Word conversion error.")
     }
 
+    ///Fetch the current value for the destination/b-operand. Takes a snapshot of the value as-it-is.
     fn fetch_b_value(&mut self, operand: &BOperand, memory: Memory) -> Word {
         let mem_ref = memory.borrow_mut();
         let retval = match operand {
@@ -654,12 +658,9 @@ impl VirtualCpu {
         retval
     }
 
-    ///Store a value in the correct location.
-    /// 
-    /// operand: b-operand describing where the data needs to be stored.
-    /// memory: 
+    ///Store a value in the correct location, according to the provided `BOperand`. `a_next_word` should be set to the result
+    /// of calling `uses_next_word()` on the `AOperand` instance for this instruction.
     pub(crate) fn store_value(&mut self, operand: &BOperand, memory: Memory, a_next_word: bool, value: Word) {
-        println!("STORE b-op:{operand:?}; value:{:04x}", *value);
         match operand {
             BOperand::RegA => self.registers.reg_a = value,
             BOperand::RegB => self.registers.reg_b = value,

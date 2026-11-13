@@ -5,6 +5,8 @@ use super::word::Word;
 
 extern crate num;
 
+/// Structure describing a decoded instruction, along with space for the values
+/// needed to perform that instruction.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct DecodedInstruction {
     /// Instruction to run.
@@ -82,6 +84,9 @@ impl DecodedInstruction {
 
 #[repr(u8)]
 #[derive(Debug, PartialEq, Eq, Clone)]
+///Possible variants of the source/a-operand. Note: The "small literals" are implemented
+/// with a separate field since they will need to be turned into a `Word` for use
+/// anyway.
 pub enum AOperand {
     RegA = 0x00,
     RegB = 0x01,
@@ -183,6 +188,8 @@ impl TryInto<AOperand> for u16 {
 }
 
 impl AOperand {
+    ///Returns if the current variant of this operand will require a value, fetched
+    /// relative to the current Program Counter value.
     pub fn uses_next_word(&self) -> bool {
         match self {
             AOperand::OffsetA
@@ -202,6 +209,7 @@ impl AOperand {
 }
 
 #[derive(FromPrimitive, Debug, PartialEq, Eq, Clone)]
+///Possible variants of the destination/b-operand.
 pub enum BOperand {
     RegA = 0x00,
     RegB = 0x01,
@@ -243,6 +251,8 @@ pub enum BOperand {
 }
 
 impl BOperand {
+    ///Returns if the current variant of this operand will require a value, fetched
+    /// relative to the current Program Counter value.
     pub fn has_delay(&self) -> bool {
         match self {
             BOperand::OffsetA
@@ -304,6 +314,7 @@ impl TryInto<BOperand> for AOperand {
 }
 
 #[derive(FromPrimitive, Debug, PartialEq, Eq, Clone)]
+///Instructions used by the DCPU-16 CPU.
 pub enum DcpuInstruction {
     /// Invalid instruction. May crash the CPU if you like.
     Undefined = 0x40, //For instructions that weren't filled in, like 0x18
@@ -390,6 +401,7 @@ pub enum DcpuInstruction {
     Hwi = 0x12 | 0x20,
 }
 
+///Result, and required follow-up steps, of an instruction having been executed.
 pub enum InstructionResult {
     /// Executing the instruction did not result in any kind of special result.
     None,
@@ -412,6 +424,8 @@ pub enum InstructionResult {
 }
 
 impl DcpuInstruction {
+    ///Checks if the instruction is a member of the "special" block, meaning the instruction
+    /// expects only an a-operand.
     pub fn is_special(&self) -> bool {
         match self {
             Self::Jsr
@@ -425,7 +439,8 @@ impl DcpuInstruction {
             _ => false,
         }
     }
-
+    ///Checks if the instruction is a member of the "comparison/branching" block, meaning the
+    /// instruction may result in additional instructions being skipped.
     pub fn is_branching(&self) -> bool {
         match self {
             Self::Ifa
@@ -440,6 +455,8 @@ impl DcpuInstruction {
         }
     }
 
+    ///Tries to perform an instruction, if possible with the current information. Inspect the
+    /// returned value to determine what further steps are needed.
     pub fn run_instruction(
         &self,
         operand_a: Word,

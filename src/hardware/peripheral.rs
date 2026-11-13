@@ -13,6 +13,7 @@ pub struct PeripheralInfo {
 }
 
 impl PeripheralInfo {
+    ///Convenience function to split the data in the struct into 16-bit `Word`s.
     pub fn to_words(&self) -> [Word;5] {
         [
             Word((self.hardware_id & 0xffff) as u16),
