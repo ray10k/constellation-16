@@ -82,7 +82,7 @@ pub enum TickResult {
     QueryHardware(Word),
     /// A `HWN` instruction finished. Same as `Instruction` variant, but the number of connected peripherals
     /// must be written to the given target.
-    NumberHardware(Word),
+    NumberHardware(AOperand),
     /// A `HWI` instruction finished. Same as `Instruction` variant, but the peripheral at the indicated address
     /// must receive an interrupt.
     InterruptHardware(Word),
@@ -352,7 +352,7 @@ impl VirtualCpu {
                                 DcpuInstruction::Hwn => {
                                     return (
                                         self,
-                                        Ok(TickResult::NumberHardware(instr_ref.fetched_a)),
+                                        Ok(TickResult::NumberHardware(instr_ref.operand_a)),
                                     );
                                 }
                                 DcpuInstruction::Hwq => {
@@ -654,7 +654,11 @@ impl VirtualCpu {
         retval
     }
 
-    fn store_value(&mut self, operand: &BOperand, memory: Memory, a_next_word: bool, value: Word) {
+    ///Store a value in the correct location.
+    /// 
+    /// operand: b-operand describing where the data needs to be stored.
+    /// memory: 
+    pub(crate) fn store_value(&mut self, operand: &BOperand, memory: Memory, a_next_word: bool, value: Word) {
         println!("STORE b-op:{operand:?}; value:{:04x}", *value);
         match operand {
             BOperand::RegA => self.registers.reg_a = value,

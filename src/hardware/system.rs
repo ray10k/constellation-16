@@ -68,8 +68,18 @@ impl VirtualComputer {
                             self.cpu.registers.reg_y = ZERO;
                         }
                     },
-                    TickResult::NumberHardware(word) => todo!(),
-                    TickResult::InterruptHardware(word) => todo!(),
+                    TickResult::NumberHardware(to_where) => {
+                        let peripheral_count = Word(self.peripherals.len() as u16);
+                        if let Ok(where_) = to_where.try_into() {
+                            self.cpu.store_value(&where_, self.memory.dup(), false, peripheral_count);
+                        } //Trying to write to an invalid location will silently fail anyway.
+                    },
+                    TickResult::InterruptHardware(hw_id) => {
+                        if hw_id.to_usize() < self.peripherals.len() {
+                            let hw_target = &mut self.peripherals[hw_id.to_usize()];
+                            hw_target.interrupt(self.memory.dup(), &mut self.cpu.registers);
+                        }
+                    },
                 }
             },
             Err(fail_addr) => {
